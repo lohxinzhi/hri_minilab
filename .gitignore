@@ -1,0 +1,64 @@
+# Local Conda and virtual environments (keep environment specifications)
+.conda/
+.venv/
+venv/
+/env/
+/envs/
+/miniconda3/
+/anaconda3/
+
+# Python caches and build artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+/build/
+/dist/
+.coverage
+htmlcov/
+
+# Secrets; examples must contain placeholders only
+.env
+.env.*
+!.env.example
+/secrets/
+/credentials/
+credentials.json
+service-account*.json
+*.pem
+*.key
+
+# IDE and operating-system files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+._*
+Thumbs.db
+Desktop.ini
+
+# Temporary experiments and model downloads
+/outputs/
+/tmp/
+/.cache/
+/models/downloads/
+/weights/
+/runs/
+/evaluation/results/tmp/
+
+# Generated videos are untracked, but required final videos MUST enter Canvas ZIP.
+# Packaging must explicitly include Video_Task2, Video_Task3, Video_Task4
+# with their actual video extensions; see docs/setup_checklist.md.
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.webm
+# Do not broadly ignore CSV, JSON, YAML, XML, PNG, PDF, or ONNX assets.
+
+# Local upstream checkout; provenance remains tracked
+/third_party/quadruped_mujoco/
