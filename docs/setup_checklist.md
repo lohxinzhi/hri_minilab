@@ -5,7 +5,7 @@ Machine inspected        [x]
 Miniconda installed      [x]
 Repository structured    [x]
 Upstream source pinned   [ ]
-Conda environment ready  [ ]
+Conda environment ready  [x]
 Dependencies installed   [ ]
 Headless simulation      [ ]
 Native viewer            [ ]
@@ -16,7 +16,7 @@ Three cameras            [ ]
 Architecture inspected   [ ]
 ```
 
-Repository scaffolding has been approved. The assignment Conda environment has not been created. Visual and manual tests remain pending until explicitly confirmed by the user.
+Repository scaffolding has been approved. The `quadruped_mujoco` Conda environment was created and verified after activation: Python 3.11.16 at `/home/briansyc/miniconda3/envs/quadruped_mujoco/bin/python`; `conda env list` confirmed it was active. No project dependencies have been installed. Visual and manual tests remain pending until explicitly confirmed by the user.
 
 ## Required Canvas submission videos
 
