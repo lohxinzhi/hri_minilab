@@ -8,11 +8,11 @@ Upstream source pinned   [x]
 Conda environment ready  [x]
 Dependencies installed   [x]
 Headless simulation      [x]
-Native viewer            [ ]
-Keyboard controls        [ ]
-Browser GUI              [ ]
-Three terrain maps       [ ]
-Three cameras            [ ]
+Native viewer            [x]
+Keyboard controls        [x]
+Browser GUI              [x]
+Three terrain maps       [x]
+Three cameras            [x]
 Architecture inspected   [ ]
 ```
 
@@ -56,4 +56,31 @@ From the upstream directory, `python eg/play.py --headless --duration 1` exited 
 
 A supplementary in-memory run of the unchanged entry point confirmed 197 physics steps, 50 policy inferences, and 0.985 seconds of simulated time. Upstream's duration option limits wall-clock runtime; it does not guarantee exactly one simulated second.
 
-Optional `evdev` is not installed; the example reported browser keyboard control available. Native keyboard operation remains unverified. No viewer or browser GUI was launched, and no terrain, camera, or complete architecture inspection is claimed.
+At the time of the headless test, optional `evdev` was absent. It was subsequently installed (version 2.0.0). After the user changed input-group membership and logged out/in, read-only checks confirmed active `input` membership and successful access to both detected keyboards.
+
+The user explicitly confirmed the native viewer launches, the robot is visible and stable, W/S forward/backward, A/D strafe, Q/E turning, R/F body-height control, and T reset all work. Native viewer and keyboard controls are therefore marked complete. The user also confirmed the browser server starts, the page opens at http://127.0.0.1:8765, the live simulation is visible and stable, movement/E-Stop/Reset Robot work, and Map/Camera selectors are visible. Browser GUI verification is complete. The user has also manually verified all three listed terrain maps and all three robot-mounted camera views; results are recorded below. Architecture inspection remains pending.
+
+## Verified terrain-map and onboard-camera tests
+
+Source inspected at pinned commit `dd40180f1121a66373d261e64a9a09eb69b1b2a7`. Selection method: browser Map dropdown.
+
+| Test | Result | Notes |
+| --- | --- | --- |
+| Race Track | PASS | baseline terrain |
+| Stairs | PASS | stepped terrain |
+| Perlin Rough Terrain | PASS | uneven heightfield |
+| Front view | PASS | robot-mounted first-person camera |
+| Rear overhead | PASS | robot-mounted rear/overhead camera |
+| Top-down | PASS | robot-mounted overhead camera |
+
+For all three maps, the user confirmed correct map loading and spawn, stable robot, forward movement, turning, and reset. No unreported measurements are included.
+
+Camera definitions: `src/runtime_control/integration.py` (`make_standard_robot_cameras`, `standard_camera_options`); `eg/play.py` uses prefix `dog`; `compose_scene` in `map_manager.py` attaches them beneath `trunk`.
+
+- [x] Camera 1 view works: `dog_front_camera` — Front view (first person)
+- [x] Camera 2 view works: `dog_rear_overhead_camera` — Rear overhead follow
+- [x] Camera 3 view works: `dog_top_camera` — Top-down view
+- [x] Front camera identified: user confirmed `dog_front_camera` is the first-person camera for future Task 4 perception
+- [x] All three camera views move with the robot, as confirmed by the user
+
+Terrain and camera milestone boxes are complete based on explicit user confirmation. No camera wrapper or programmatic frame capture has been created.
