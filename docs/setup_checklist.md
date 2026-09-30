@@ -13,10 +13,10 @@ Keyboard controls        [x]
 Browser GUI              [x]
 Three terrain maps       [x]
 Three cameras            [x]
-Architecture inspected   [ ]
+Architecture inspected   [x]
 ```
 
-Repository scaffolding has been approved. The `quadruped_mujoco` Conda environment was created and verified after activation: Python 3.11.16 at `/home/briansyc/miniconda3/envs/quadruped_mujoco/bin/python`; `conda env list` confirmed it was active. The upstream editable package and required assignment dependencies have been installed and verified. Visual and manual tests remain pending until explicitly confirmed by the user.
+Repository scaffolding has been approved. The `quadruped_mujoco` Conda environment was created and verified after activation: Python 3.11.16 at `/home/briansyc/miniconda3/envs/quadruped_mujoco/bin/python`; `conda env list` confirmed it was active. The upstream editable package and required assignment dependencies have been installed and verified. All listed Task 2 platform checks are confirmed complete. Future MiniLab scene, motion, perception, dialogue, evaluation, and demonstration-video work remains outstanding.
 
 ## Required Canvas submission videos
 
@@ -83,4 +83,4 @@ Camera definitions: `src/runtime_control/integration.py` (`make_standard_robot_c
 - [x] Front camera identified: user confirmed `dog_front_camera` is the first-person camera for future Task 4 perception
 - [x] All three camera views move with the robot, as confirmed by the user
 
-Terrain and camera milestone boxes are complete based on explicit user confirmation. No camera wrapper or programmatic frame capture has been created.
+Terrain and camera milestone boxes are complete based on explicit user confirmation. No camera wrapper or programmatic frame capture has been created. Architecture inspection is documented in `docs/platform_architecture.md` and is based on the pinned upstream source.
