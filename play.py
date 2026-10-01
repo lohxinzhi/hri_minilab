@@ -12,13 +12,14 @@ Joint order:
 import time
 from pathlib import Path
 import sys
+from collections import deque
 import mujoco
 import numpy as np
 import onnxruntime as ort
 import yaml
 
 from vision_module import VisionModule
-from motion_api import timed_vel_cmd
+from motion_api import move, turn
 
 
 # All in-repo resources are located relative to this file, so running does not
@@ -248,11 +249,12 @@ GLFW_KEY_SPACE = 32
 height_cmd = 0.25
 reset_flag = False
 print_action_flag = False
+turn_angle_deg = None
 
 
 def key_callback(keycode):
     """MuJoCo keyboard callback — function keys only"""
-    global height_cmd, reset_flag, print_action_flag
+    global height_cmd, reset_flag, print_action_flag, turn_angle_deg
     if keycode == GLFW_KEY_R:
         height_cmd = max(0.20, height_cmd - 0.02)
     elif keycode == GLFW_KEY_F:
@@ -264,8 +266,9 @@ def key_callback(keycode):
     elif keycode == GLFW_KEY_Y:
         print_action_flag = not print_action_flag
     elif keycode == GLFW_KEY_X:
+        turn_angle_deg = None
         _pressed_keys.clear()
-        timed_vel_cmd(0, 0, 0, duration=0, new_command=True)
+        move(0, 0, 0, duration=0, new_command=True)
     elif keycode == GLFW_KEY_SPACE and "runtime" in globals():
         runtime.request_push()
 
@@ -284,6 +287,55 @@ def keyboard_velocity(pressed_keys):
     vy = 1.0 if "a" in pressed_keys else -1.0 if "d" in pressed_keys else 0.0
     wz = 1.0 if "q" in pressed_keys else -1.0 if "e" in pressed_keys else 0.0
     return vx, vy, wz
+
+
+def heading_deg(quaternion_wxyz):
+    """Return world yaw in degrees from the robot's MuJoCo quaternion."""
+    w, x, y, z = quaternion_wxyz
+    return np.rad2deg(np.arctan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z)))
+
+
+def install_browser_motion_queue(panel):
+    """Preserve command arrival order before panel actions become a set."""
+    commands = deque()
+    if panel is None:
+        return commands
+    handle_post = panel._handle_post
+
+    def handle_motion_post(path, payload):
+        with panel.lock:
+            result = handle_post(path, payload)
+            if path == "/api/action":
+                action = payload.get("action", "")
+                if action.startswith("turn_"):
+                    commands.append(("turn", float(action.removeprefix("turn_"))))
+                elif action in {"stop", "reset"}:
+                    commands.append(("stop", None))
+            elif path == "/api/map":
+                commands.append(("stop", None))
+            elif path == "/api/key" and payload.get("pressed"):
+                velocity = keyboard_velocity(panel.keyboard_snapshot())
+                speeds = (panel.state["linear_x"], panel.state["linear_y"], panel.state["yaw"])
+                commands.append(("velocity", tuple(v * s for v, s in zip(velocity, speeds))))
+            return result
+
+    panel._handle_post = handle_motion_post
+    return commands
+
+
+def apply_motion_events(events, turn_angle, command, current_heading):
+    """Apply ordered browser requests and return the latest active command."""
+    for kind, value in events:
+        if kind == "turn":
+            command = turn(value, current_heading, new_command=True)
+            turn_angle = value
+        elif kind == "velocity":
+            turn_angle = None
+            command = move(*value, new_command=True)
+        else:
+            turn_angle = None
+            command = move(0, 0, 0, duration=0, new_command=True)
+    return turn_angle, command
 
 
 def build_single_obs(quat_xyzw, omega, joint_q_isaac, joint_dq_isaac,
@@ -369,6 +421,10 @@ def build_runtime_config(args, kps, kds):
         command=(1.0, 1.0, 1.0, 0.25),
         height_range=(0.2, 0.35),
         cameras=CAMERA_OPTIONS,
+        actions=[
+            {"key": f"turn_{key * 10}", "label": f"Turn +{key * 10} deg", "shortcut": str(key)}
+            for key in range(1, 10)
+        ],
         port=args.gui_port,
         tracking_camera={
             "camera_distance": 2.0,
@@ -395,7 +451,7 @@ def build_runtime_config(args, kps, kds):
 
 def main():
     """Parse launch options and run the robot simulation."""
-    global height_cmd, reset_flag, print_action_flag, runtime, runtime_config
+    global height_cmd, reset_flag, print_action_flag, runtime, runtime_config, turn_angle_deg
 
     import argparse
     parser = argparse.ArgumentParser()
@@ -513,6 +569,7 @@ def main():
     mj_model.opt.timestep = simulation_dt
     mj_data = scene.data
     runtime = scene.runtime
+    browser_motion_commands = install_browser_motion_queue(runtime.panel)
     motor_delay = MotorCommandDelay(simulation_dt)
 
     print(f"\n[VERIFY] MuJoCo joint order:")
@@ -569,6 +626,7 @@ def main():
     print(f"\n  W/S:forward/back A/D:strafe Q/E:turn X:emergency stop"
           f" T:reset Y:print model output")
     print(f"  R:crouch↓ F:stand↑ Z:reset height (default 0.25m)")
+    print("  Browser only: 1–9 request relative turns of +10–90 degrees")
     print(f"  [press for a 1-second move; X stops immediately] global evdev listener,"
           f" works on Wayland/X11\n")
 
@@ -580,7 +638,9 @@ def main():
     fpv_enabled = not args.headless
     next_low_rate_task = 0.0
     previous_velocity_request = (0.0, 0.0, 0.0)
-    timed_vel_cmd(0, 0, 0, duration=0, new_command=True)
+    turn_angle_deg = None
+    previous_heading = heading_deg(mj_data.qpos[3:7])
+    move(0, 0, 0, duration=0, new_command=True)
     with display as viewer, vision:
         # The browser and the native viewer are mutually exclusive display
         # modes, to avoid rendering twice and slowing the simulation down.
@@ -630,17 +690,41 @@ def main():
                 and velocity_request != previous_velocity_request
             )
             if stop_requested:
-                cmd = timed_vel_cmd(0, 0, 0, duration=0, new_command=True)
+                turn_angle_deg = None
+                cmd = move(0, 0, 0, duration=0, new_command=True)
             else:
-                cmd = timed_vel_cmd(*velocity_request, new_command=new_command)
+                if new_command:
+                    turn_angle_deg = None
+                cmd = move(*velocity_request, new_command=new_command)
             previous_velocity_request = velocity_request
+
+            if runtime.panel is not None:
+                with runtime.panel.lock:
+                    motion_events = list(browser_motion_commands)
+                    browser_motion_commands.clear()
+                # Process every event in arrival order: the latest wins.
+                turn_angle_deg, cmd = apply_motion_events(
+                    motion_events, turn_angle_deg, cmd, heading_deg(mj_data.qpos[3:7])
+                )
+                runtime.consume_actions()
+
+            current_heading = heading_deg(mj_data.qpos[3:7])
+            heading_change = (current_heading - previous_heading + 180) % 360 - 180
+            previous_heading = current_heading
+            if turn_angle_deg is not None:
+                cmd = turn(
+                    turn_angle_deg, current_heading,
+                    yaw_rate_deg_s=heading_change / simulation_dt,
+                    dt=simulation_dt,
+                )
 
             runtime_state = runtime.runtime_control(mj_model, mj_data)
             if runtime.consume_reset():
                 reset_flag = True
 
             if reset_flag:
-                cmd = timed_vel_cmd(0, 0, 0, duration=0, new_command=True)
+                turn_angle_deg = None
+                cmd = move(0, 0, 0, duration=0, new_command=True)
                 reset_robot(
                     mj_model,
                     mj_data,
@@ -653,6 +737,7 @@ def main():
                 print_action_flag = False
                 height_cmd = runtime_config["command"]["height"]
                 motor_delay.reset()
+                previous_heading = heading_deg(mj_data.qpos[3:7])
                 runtime.reset_simulation_state()
                 reset_flag = False
 
@@ -769,7 +854,7 @@ def main():
                 time.sleep(simulation_dt - elapsed)
 
     scene.close()
-    timed_vel_cmd(0, 0, 0, duration=0, new_command=True)
+    move(0, 0, 0, duration=0, new_command=True)
     print("\n[INFO] simulation finished")
 
 

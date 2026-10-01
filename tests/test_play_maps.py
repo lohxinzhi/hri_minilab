@@ -3,16 +3,49 @@
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
+from threading import RLock
 from types import SimpleNamespace
 from unittest.mock import patch
 
 import numpy as np
 from runtime_control import RuntimeControl, RuntimeScene
+from runtime_control.panel import RuntimeControlPanel
 
 import play
 
 
 class PlayMapTests(unittest.TestCase):
+    def test_yaw_shortcuts_and_quaternion_heading(self):
+        config = self.make_config("coco_scene")
+        for key in range(1, 10):
+            self.assertEqual(
+                config["runtime_actions"][f"turn_{key * 10}"]["shortcut"], str(key)
+            )
+        self.assertAlmostEqual(play.heading_deg([np.sqrt(0.5), 0, 0, np.sqrt(0.5)]), 90)
+
+    def test_browser_command_order_and_latest_override(self):
+        # Use the real POST validation without starting a server or browser.
+        panel = RuntimeControlPanel.__new__(RuntimeControlPanel)
+        panel.lock = RLock()
+        panel.actions, panel.pressed_keys = set(), set()
+        panel.allowed_actions = {"turn_10", "turn_90", "stop"}
+        panel.state = {"linear_x": 1, "linear_y": 1, "yaw": 1}
+        events = play.install_browser_motion_queue(panel)
+        panel._handle_post("/api/action", {"action": "turn_10"})
+        panel._handle_post("/api/key", {"key": "w", "pressed": True})
+        self.assertEqual(list(events), [("turn", 10), ("velocity", (1, 0, 0))])
+        target, command = play.apply_motion_events(events, None, np.zeros(3), 60)
+        self.assertIsNone(target)
+        np.testing.assert_array_equal(command, [1, 0, 0])
+        panel._handle_post("/api/action", {"action": "turn_90"})
+        target, command = play.apply_motion_events(events, None, np.zeros(3), 60)
+        self.assertEqual(target, 90)
+        self.assertGreater(command[2], 0)
+        panel._handle_post("/api/action", {"action": "stop"})
+        target, command = play.apply_motion_events(events, target, command, 60)
+        self.assertIsNone(target)
+        np.testing.assert_array_equal(command, [0, 0, 0])
+
     def test_keyboard_directions(self):
         self.assertEqual(play.keyboard_velocity({"w", "a", "q"}), (1, 1, 1))
         self.assertEqual(play.keyboard_velocity({"s", "d", "e"}), (-1, -1, -1))
@@ -21,7 +54,7 @@ class PlayMapTests(unittest.TestCase):
     def test_held_keyboard_submits_only_one_timed_command(self):
         with (
             patch.object(play, "_pressed_keys", {"w"}),
-            patch.object(play, "timed_vel_cmd", wraps=play.timed_vel_cmd) as command,
+            patch.object(play, "move", wraps=play.move) as command,
             patch.object(
                 play.sys,
                 "argv",
