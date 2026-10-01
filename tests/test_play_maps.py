@@ -1,7 +1,7 @@
 """Check COCO map registration and robot scene compatibility."""
 
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -13,6 +13,19 @@ import play
 
 
 class PlayMapTests(unittest.TestCase):
+    def test_invalid_vision_rates_are_rejected_before_scene_creation(self):
+        for rate in ("0", "-1", "nan", "inf"):
+            with (
+                self.subTest(rate=rate),
+                patch.object(play.sys, "argv", ["play.py", "--vision-hz", rate]),
+                patch.object(play, "RuntimeScene") as scene,
+                redirect_stderr(StringIO()),
+                self.assertRaises(SystemExit) as error,
+            ):
+                play.main()
+            self.assertEqual(error.exception.code, 2)
+            scene.assert_not_called()
+
     def make_config(self, map_name):
         args = SimpleNamespace(map=map_name, gui=False, gui_port=8765)
         return play.build_runtime_config(args, [40.0], [1.0])
@@ -67,6 +80,8 @@ class PlayMapTests(unittest.TestCase):
                     "--no-policy",
                     "--duration",
                     "0.02",
+                    "--vision-hz",
+                    "10",
                 ],
             ),
             redirect_stdout(StringIO()),

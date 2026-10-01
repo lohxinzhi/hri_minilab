@@ -67,6 +67,7 @@ MAP_SPECS["coco_scene"] = MapSpec(
 # compose_scene injects these under "trunk"; they move and rotate with the robot.
 ROBOT_CAMERAS = make_standard_robot_cameras(prefix="dog")
 CAMERA_OPTIONS = standard_camera_options(prefix="dog")
+DEFAULT_VISION_HZ = 20.0
 
 
 # ============================================================
@@ -434,11 +435,20 @@ def main():
         help="enable only the browser live-tuning panel (no native MuJoCo viewer)",
     )
     parser.add_argument("--gui-port", type=int, default=8765, help="browser panel port")
+    parser.add_argument(
+        "--vision-hz",
+        type=float,
+        default=DEFAULT_VISION_HZ,
+        help="maximum FPV rendering and detection rate in Hz (default: 20)",
+    )
     args = parser.parse_args()
     if args.gui and args.headless:
         parser.error("--gui and --headless cannot be used together")
     if args.duration is not None and args.duration <= 0:
         parser.error("--duration must be greater than 0")
+    if not np.isfinite(args.vision_hz) or args.vision_hz <= 0:
+        parser.error("--vision-hz must be a finite number greater than 0")
+    vision_interval = 1.0 / args.vision_hz
 
     config_path = DEFAULT_CONFIG
     policy_path = (
@@ -583,14 +593,15 @@ def main():
                 elevation=-25.0,
             )
 
-        start = time.time()
-
         # Initialize GLFW on the main thread before the browser renderer starts.
         # Concurrent first-time initialization in both threads can abort GLFW.
         if fpv_enabled:
+            runtime.maps.activate(mj_model, mj_data, args.map)
             fpv_enabled = vision.stream_fpv(mj_model, mj_data)
-            next_fpv_frame = time.monotonic() + 1.0 / 30.0
+            next_fpv_frame = time.monotonic() + vision_interval
 
+        # Model loading and the first inference should not consume run duration.
+        start = time.time()
         while viewer.is_running() and time.time() - start < simulation_duration:
             step_start = time.time()
 
@@ -726,11 +737,11 @@ def main():
 
             if not args.gui and not args.headless:
                 viewer.sync()
-            # Render FPV at 30 Hz instead of at the physics update rate.
+            # Cap vision at the configured rate, without catch-up bursts.
             now = time.monotonic()
             if fpv_enabled and now >= next_fpv_frame:
                 fpv_enabled = vision.stream_fpv(mj_model, mj_data)
-                next_fpv_frame = now + 1.0 / 30.0
+                next_fpv_frame = time.monotonic() + vision_interval
             elapsed = time.time() - step_start
             if simulation_dt - elapsed > 0:
                 time.sleep(simulation_dt - elapsed)

@@ -9,6 +9,8 @@ from ultralytics import YOLO
 class VisionModule:
     """Detect objects with a pretrained model reused across frames."""
 
+    COCO_SCENE_CLASSES = frozenset({"chair", "bench", "bottle", "cup"})
+
     def __init__(self, model: str = "yolov8n.pt") -> None:
         """Accept a pretrained model name or a path to custom model weights."""
         self._model_path = model
@@ -33,7 +35,8 @@ class VisionModule:
 
         Call repeatedly from the simulation loop on the main thread. Returns
         False when Q, Escape, or the window close button is pressed; the caller
-        can stop streaming while continuing simulation. No detection is run.
+        can stop streaming while continuing simulation. Labels the chair,
+        bench, bottle, and cup classes; other detections get grey boxes only.
         """
         if self._renderer is None:
             self._renderer = mujoco.Renderer(mj_model, height=480, width=640)
@@ -43,6 +46,25 @@ class VisionModule:
 
         self._renderer.update_scene(mj_data, camera=camera)
         frame = cv2.cvtColor(self._renderer.render(), cv2.COLOR_RGB2BGR)
+        detections = self.get_bbox(frame, include_labels=True)
+        for detection in detections:
+            selected = detection["label"] in self.COCO_SCENE_CLASSES
+            x_min, y_min, x_max, y_max = map(int, detection["bbox"])
+            color = (0, 255, 0) if selected else (64, 64, 64)
+            cv2.rectangle(frame, (x_min, y_min), (x_max, y_max), color, 2)
+            if not selected:
+                continue
+            label = f"{detection['label']} {detection['confidence']:.2f}"
+            cv2.putText(
+                frame,
+                label,
+                (x_min, max(20, y_min - 8)),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.6,
+                color,
+                2,
+                cv2.LINE_AA,
+            )
         cv2.imshow(self._window_name, frame)
         key = cv2.waitKey(1) & 0xFF
         if (
@@ -66,16 +88,21 @@ class VisionModule:
                 # The user may already have closed the window through the OS.
                 pass
 
-    def get_bbox(self, frame: np.ndarray) -> list[list[float]]:
+    def get_bbox(
+        self, frame: np.ndarray, *, include_labels: bool = False
+    ) -> list[list[float]] | list[dict]:
         """Return detected boxes as [x_min, y_min, x_max, y_max] pixel coordinates.
 
         Args:
             frame: One HWC uint8 image with three BGR channels. Convert RGB
                 camera frames to BGR before calling this method.
+            include_labels: Include the class name and confidence with each box.
 
         Returns:
             One coordinate list per detected object, or [] if none are detected.
             Coordinates are relative to the original frame size.
+            With include_labels=True, returns dictionaries containing bbox,
+            label, and confidence instead of coordinate lists.
 
         The selected model loads on first use. The default COCO-pretrained
         yolov8n.pt weights download automatically if not available locally.
@@ -92,4 +119,18 @@ class VisionModule:
         result = self._model.predict(source=frame, verbose=False)[0]
         if result.boxes is None:
             return []
-        return result.boxes.xyxy.cpu().tolist()
+        coordinates = result.boxes.xyxy.cpu().tolist()
+        if not include_labels:
+            return coordinates
+        class_ids = result.boxes.cls.cpu().tolist()
+        confidences = result.boxes.conf.cpu().tolist()
+        return [
+            {
+                "bbox": bbox,
+                "label": result.names[int(class_id)],
+                "confidence": confidence,
+            }
+            for bbox, class_id, confidence in zip(
+                coordinates, class_ids, confidences, strict=True
+            )
+        ]

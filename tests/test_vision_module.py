@@ -37,6 +37,20 @@ class GetBboxTests(unittest.TestCase):
             self.assertEqual(vision.get_bbox(self.frame), [])
             constructor.assert_called_once_with("custom_weights.pt")
 
+    def test_labeled_boxes_preserve_class_and_confidence(self):
+        boxes = Mock()
+        boxes.xyxy.cpu.return_value.tolist.return_value = [[1, 2, 30, 40]]
+        boxes.cls.cpu.return_value.tolist.return_value = [56]
+        boxes.conf.cpu.return_value.tolist.return_value = [0.9]
+        with patch.object(vision_module, "YOLO") as constructor:
+            constructor.return_value.predict.return_value = [
+                SimpleNamespace(boxes=boxes, names={56: "chair"})
+            ]
+            self.assertEqual(
+                self.vision.get_bbox(self.frame, include_labels=True),
+                [{"bbox": [1, 2, 30, 40], "label": "chair", "confidence": 0.9}],
+            )
+
     def test_no_detections(self):
         xyxy = Mock()
         xyxy.cpu.return_value.tolist.return_value = []
@@ -66,10 +80,46 @@ class GetBboxTests(unittest.TestCase):
 
 
 class FpvStreamTests(unittest.TestCase):
+    def test_all_boxes_are_drawn_but_only_map_classes_are_labeled(self):
+        labels = ["chair", "bench", "bottle", "cup", "person", "dining table"]
+        detections = [
+            {"bbox": [5, 10, 30, 40], "label": label, "confidence": 0.8}
+            for label in labels
+        ]
+        with (
+            patch.object(
+                vision_module.VisionModule, "get_bbox", return_value=detections
+            ) as detect,
+            patch.object(vision_module.mujoco, "Renderer") as constructor,
+            patch.object(vision_module.cv2, "namedWindow"),
+            patch.object(vision_module.cv2, "imshow"),
+            patch.object(vision_module.cv2, "waitKey", return_value=-1),
+            patch.object(vision_module.cv2, "getWindowProperty", return_value=1),
+            patch.object(vision_module.cv2, "destroyWindow"),
+            patch.object(vision_module.cv2, "rectangle") as rectangle,
+            patch.object(vision_module.cv2, "putText") as text,
+            vision_module.VisionModule() as vision,
+        ):
+            constructor.return_value.render.return_value = np.zeros(
+                (48, 64, 3), dtype=np.uint8
+            )
+            self.assertTrue(vision.stream_fpv(Mock(), Mock()))
+            self.assertTrue(detect.call_args.kwargs["include_labels"])
+            self.assertEqual(rectangle.call_count, 6)
+            self.assertEqual(
+                [call.args[3] for call in rectangle.call_args_list],
+                [(0, 255, 0)] * 4 + [(64, 64, 64)] * 2,
+            )
+            self.assertEqual(
+                [call.args[1] for call in text.call_args_list],
+                [label + " 0.80" for label in labels[:4]],
+            )
+
     def test_camera_renderer_reuse_and_rgb_conversion(self):
         rgb = np.array([[[255, 10, 20]]], dtype=np.uint8)
         model, data = Mock(), Mock()
         with (
+            patch.object(vision_module.VisionModule, "get_bbox", return_value=[]),
             patch.object(vision_module.mujoco, "Renderer") as constructor,
             patch.object(vision_module.cv2, "namedWindow") as create_window,
             patch.object(vision_module.cv2, "imshow") as show,
@@ -95,6 +145,7 @@ class FpvStreamTests(unittest.TestCase):
         for key, visible in ((ord("q"), 1), (27, 1), (-1, 0)):
             with (
                 self.subTest(key=key, visible=visible),
+                patch.object(vision_module.VisionModule, "get_bbox", return_value=[]),
                 patch.object(vision_module.mujoco, "Renderer") as constructor,
                 patch.object(vision_module.cv2, "namedWindow"),
                 patch.object(vision_module.cv2, "imshow"),
