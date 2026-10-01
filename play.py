@@ -172,18 +172,23 @@ class RobotActionSequence:
     def __init__(self):
         self.pending = deque()
         self.active = None
+        self.active_index = None
+        self.next_index = None
         self.turn_angle = None
 
     def cancel(self):
         self.pending.clear()
         self.active = None
+        self.active_index = None
+        self.next_index = None
         self.turn_angle = None
         return move(0, 0, 0, duration=0, new_command=True)
 
-    def replace(self, actions):
+    def replace(self, actions, history_start=None):
         actions = validate_actions(actions)
         self.cancel()
         self.pending.extend(actions)
+        self.next_index = history_start
 
     def update(self, current_heading, yaw_rate_deg_s=0.0, dt=None):
         options = {"yaw_rate_deg_s": yaw_rate_deg_s, "dt": dt}
@@ -192,6 +197,7 @@ class RobotActionSequence:
             if is_move_active():
                 return command
             self.active = None
+            self.active_index = None
         elif self.active == "turn":
             self.turn_angle, command = update_turn_command(
                 self.turn_angle, current_heading, **options
@@ -199,8 +205,12 @@ class RobotActionSequence:
             if self.turn_angle is not None:
                 return command
             self.active = None
+            self.active_index = None
         while self.pending:
             action = self.pending.popleft()
+            action_index = self.next_index
+            if self.next_index is not None:
+                self.next_index += 1
             kind = action["action"]
             if kind == "chat":
                 print(f"[DIALOGUE] {action['reply']}")
@@ -215,6 +225,7 @@ class RobotActionSequence:
                 )
                 if is_move_active():
                     self.active = "move"
+                    self.active_index = action_index
                     return command
             elif kind == "turn":
                 self.turn_angle, command = update_turn_command(
@@ -222,6 +233,7 @@ class RobotActionSequence:
                 )
                 if self.turn_angle is not None:
                     self.active = "turn"
+                    self.active_index = action_index
                     return command
         return move(0, 0, 0)
 
@@ -563,7 +575,7 @@ def run_simulation(browser_state):
             # Poll completed dialogue plans without waiting for console or API I/O.
             # If multiple replies arrived, the latest plan overrides previous work.
             while (actions := dialogue.poll_actions()) is not None:
-                sequence.replace(actions)
+                sequence.replace(actions, dialogue.action_history_start(actions))
                 print(f"[ACTIONS] {actions}")
             while (error := dialogue.poll_error()) is not None:
                 print(f"[DIALOGUE] {error}")
@@ -582,12 +594,15 @@ def run_simulation(browser_state):
                 dt=simulation_dt,
             )
 
+            browser_state.set_active_action(sequence.active_index)
+
             runtime_state = runtime.runtime_control(mj_model, mj_data)
             if runtime.consume_reset():
                 reset_flag = True
 
             if reset_flag:
                 cmd = sequence.cancel()
+                browser_state.set_active_action(None)
                 reset_robot(
                     mj_model,
                     mj_data,

@@ -24,6 +24,7 @@ class BrowserState:
         self.logs = deque(maxlen=2000)
         self.log_id = 0
         self.running = True
+        self.active_action = None
         self.stop_requested = threading.Event()
 
     def append_log(self, text):
@@ -42,13 +43,22 @@ class BrowserState:
             self.frames[name] = version, jpeg.tobytes()
             self.condition.notify_all()
 
+    def set_active_action(self, index):
+        with self.condition:
+            self.active_action = index
+
     def snapshot(self):
         with self.condition:
-            return {"running": self.running, "logs": list(self.logs)}
+            return {
+                "running": self.running,
+                "logs": list(self.logs),
+                "active_action": self.active_action,
+            }
 
     def close(self):
         with self.condition:
             self.running = False
+            self.active_action = None
             self.condition.notify_all()
 
     @contextmanager
@@ -125,6 +135,8 @@ class BrowserGUI:
                     elif path == "/api/state":
                         payload = gui.state.snapshot()
                         payload["messages"] = gui.dialogue.chat_snapshot()
+                        payload["model"] = gui.dialogue.model
+                        payload["actions"] = gui.dialogue.actions_snapshot()
                         self._response(200, payload)
                     elif path in {"/stream/follow", "/stream/fpv"}:
                         self._stream(path.rsplit("/", 1)[1])

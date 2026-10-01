@@ -13,7 +13,7 @@ OS environment. The dialogue integration requires the `openai` Python package
 (`pip install openai`). `OPENAI_MODEL` defaults to `gpt-6-luna`; the SDK also
 accepts `OPENAI_BASE_URL` for an OpenAI-compatible cloud endpoint.
 
-The page contains:
+The page shows the configured LLM model and contains:
 
 - The existing third-person follow view and robot FPV, streamed side by side.
 - Labeled detection boxes in the FPV: green for selected scene classes, gray
@@ -22,6 +22,10 @@ The page contains:
   plans and API errors. Enter sends a message; Shift + Enter adds a line.
 - A bottom console panel streaming Python stdout/stderr, including `print()`
   output, independently of the chat input. Logs are also printed to the terminal.
+- A scrollable generated-actions panel beside the logs, showing every action
+  generated since simulation startup, with one JSON line per action and all
+  action properties. The currently executing action is highlighted; the highlight
+  clears when motion completes or is cancelled. Chat reply text is excluded.
 - A **Stop robot** button that cancels the current motion and remaining actions.
 
 Send requests in the chat panel, for example:

@@ -49,6 +49,28 @@ class ActionSequenceTests(unittest.TestCase):
         np.testing.assert_array_equal(self.sequence.update(125, dt=0.02), [0, 0, 0])
         self.assertIsNone(self.sequence.active)
 
+    def test_active_history_index_advances_and_clears(self):
+        self.sequence.replace(
+            [
+                {"action": "chat", "reply": "Go"},
+                movement(),
+                {"action": "turn", "angle": 90},
+            ],
+            history_start=4,
+        )
+        self.sequence.update(0, dt=0.02)
+        self.assertEqual(self.sequence.active_index, 5)
+        self.now.return_value = 11
+        self.sequence.update(0, dt=0.02)
+        self.assertEqual(self.sequence.active_index, 6)
+        self.sequence.update(88, dt=0.02)
+        self.assertIsNone(self.sequence.active_index)
+        self.sequence.replace([movement()], history_start=7)
+        self.sequence.update(88)
+        self.assertEqual(self.sequence.active_index, 7)
+        self.sequence.cancel()
+        self.assertIsNone(self.sequence.active_index)
+
     def test_zero_velocity_move_waits_for_duration(self):
         self.sequence.replace([movement(vx=0, duration=2), movement()])
         np.testing.assert_array_equal(self.sequence.update(0), [0, 0, 0])

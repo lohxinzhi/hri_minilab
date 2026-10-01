@@ -131,6 +131,8 @@ class DialogueManager:
         self._requests = Queue()
         self._chat_lock = threading.Lock()
         self._chat = []
+        self._generated_actions = []
+        self._plan_offsets = {}
         self._next_id = 1
 
     def submit_prompt(self, prompt):
@@ -160,8 +162,28 @@ class DialogueManager:
         with self._chat_lock:
             return deepcopy(self._chat)
 
-    def _reply(self, request_id, content, status):
+    def action_history_start(self, actions):
+        """Consume the history offset associated with a queued plan."""
         with self._chat_lock:
+            return self._plan_offsets.pop(id(actions), None)
+
+    def actions_snapshot(self):
+        """Return all generated actions since startup with chat replies omitted."""
+        with self._chat_lock:
+            return deepcopy(self._generated_actions)
+
+    def _reply(self, request_id, content, status, actions=None):
+        with self._chat_lock:
+            if actions is not None:
+                self._plan_offsets[id(actions)] = len(self._generated_actions)
+                self._generated_actions.extend(
+                    deepcopy(
+                        [
+                            {"action": "chat"} if action["action"] == "chat" else action
+                            for action in actions
+                        ]
+                    )
+                )
             for message in self._chat:
                 if message["id"] == request_id and message["role"] == "user":
                     message["status"] = status
@@ -266,8 +288,10 @@ class DialogueManager:
                         self._reply(request_id, error, "error")
                     continue
                 if not self._stop.is_set():
+                    self._reply(
+                        request_id, self._summarize(actions), "planned", actions=actions
+                    )
                     self._plans.put(actions)
-                    self._reply(request_id, self._summarize(actions), "planned")
         finally:
             if self._owns_client and self.client is not None:
                 self.client.close()
