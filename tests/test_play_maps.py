@@ -13,11 +13,11 @@ import play
 
 
 class PlayMapTests(unittest.TestCase):
-    def test_invalid_vision_rates_are_rejected_before_scene_creation(self):
+    def test_invalid_low_rates_are_rejected_before_scene_creation(self):
         for rate in ("0", "-1", "nan", "inf"):
             with (
                 self.subTest(rate=rate),
-                patch.object(play.sys, "argv", ["play.py", "--vision-hz", rate]),
+                patch.object(play.sys, "argv", ["play.py", "--low_hz", rate]),
                 patch.object(play, "RuntimeScene") as scene,
                 redirect_stderr(StringIO()),
                 self.assertRaises(SystemExit) as error,
@@ -80,7 +80,7 @@ class PlayMapTests(unittest.TestCase):
                     "--no-policy",
                     "--duration",
                     "0.02",
-                    "--vision-hz",
+                    "--low_hz",
                     "10",
                 ],
             ),
