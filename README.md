@@ -20,3 +20,9 @@ Chosen platform: the official [quadruped_mujoco](https://github.com/aoqianz/quad
 - `docs/`: setup checklist and future verified platform documentation.
 - `tests/`: future tests of the MiniLab implementation.
 - `outputs/`: ignored temporary experimental output and generated media.
+
+## Development handover
+
+The status above is the original scaffold snapshot and is now stale. See
+[`HANDOVER.md`](HANDOVER.md) for current implementation state, verified
+results, run commands, pending visual validation, and the continuation plan.
