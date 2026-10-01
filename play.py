@@ -73,6 +73,7 @@ ROBOT_CAMERAS = make_standard_robot_cameras(prefix="dog")
 CAMERA_OPTIONS = standard_camera_options(prefix="dog")
 DEFAULT_LOW_HZ = 20.0
 KEYBOARD_MOVE_DURATION = 1  # Seconds per new keyboard movement command.
+TURN_TOLERANCE_DEG = 3.0  # Stop and complete turns within this heading error.
 
 
 # ============================================================
@@ -326,12 +327,28 @@ def install_browser_motion_queue(panel):
     return commands
 
 
+def update_turn_command(turn_angle, current_heading, **controller_options):
+    """Advance a turn and clear it once the configured tolerance is reached."""
+    command = turn(
+        turn_angle, current_heading,
+        tolerance_deg=TURN_TOLERANCE_DEG,
+        **controller_options,
+    )
+    target = get_turn_target_heading()
+    error = (target - current_heading + 180.0) % 360.0 - 180.0
+    if abs(error) <= TURN_TOLERANCE_DEG and not np.any(command):
+        command = move(0, 0, 0, duration=0, new_command=True)
+        turn_angle = None
+    return turn_angle, command
+
+
 def apply_motion_events(events, turn_angle, command, current_heading):
     """Apply ordered browser requests and return the latest active command."""
     for kind, value in events:
         if kind == "turn":
-            command = turn(value, current_heading, new_command=True)
-            turn_angle = value
+            turn_angle, command = update_turn_command(
+                value, current_heading, new_command=True
+            )
         elif kind == "velocity":
             turn_angle = None
             command = move(*value, duration=KEYBOARD_MOVE_DURATION, new_command=True)
@@ -736,7 +753,7 @@ def main():
             heading_change = (current_heading - previous_heading + 180) % 360 - 180
             previous_heading = current_heading
             if turn_angle_deg is not None:
-                cmd = turn(
+                turn_angle_deg, cmd = update_turn_command(
                     turn_angle_deg, current_heading,
                     yaw_rate_deg_s=heading_change / simulation_dt,
                     dt=simulation_dt,

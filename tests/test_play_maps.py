@@ -15,6 +15,33 @@ import play
 
 
 class PlayMapTests(unittest.TestCase):
+    def test_turn_completes_within_configurable_tolerance(self):
+        for tolerance, start, current in [(3.0, 0, 87.1), (5.0, 179, -95.9)]:
+            with (
+                self.subTest(tolerance=tolerance),
+                patch.object(play, "TURN_TOLERANCE_DEG", tolerance),
+                redirect_stdout(StringIO()),
+            ):
+                angle, command = play.apply_motion_events(
+                    [("turn", 90)], None, np.zeros(3), start
+                )
+                self.assertEqual(angle, 90)
+                self.assertGreater(command[2], 0)
+                angle, command = play.update_turn_command(angle, current)
+                self.assertIsNone(angle)
+                np.testing.assert_array_equal(command, [0, 0, 0])
+                self.assertIsNone(play.get_turn_target_heading())
+                # Completion cancels the controller rather than resuming on drift.
+                np.testing.assert_array_equal(play.move(0, 0, 0), [0, 0, 0])
+
+    def test_turn_continues_outside_tolerance(self):
+        with redirect_stdout(StringIO()):
+            angle, _ = play.update_turn_command(90, 0, new_command=True)
+            angle, command = play.update_turn_command(angle, 86.9)
+        self.assertEqual(angle, 90)
+        self.assertGreater(command[2], 0)
+        play.move(0, 0, 0, duration=0, new_command=True)
+
     def test_heading_plot_saved_on_keyboard_interrupt(self):
         with (
             patch.object(play.sys, "argv", ["play.py", "--headless", "--no-policy"]),
