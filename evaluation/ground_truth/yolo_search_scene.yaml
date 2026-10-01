@@ -1,0 +1,19 @@
+scene: yolo_search_scene
+coordinate_frame: world
+units: meters
+usage: evaluation_only
+# Evaluation distance calculation only. Perception, navigation, and steering
+# code must never import or read this file.
+objects:
+  - id: chair_green_01
+    class: chair
+    color: green
+    position: [2.5, 1.2, 0.4399206]
+  - id: chair_red_01
+    class: chair
+    color: red
+    position: [3.5, -1.2, 0.4399206]
+  - id: couch_01
+    class: couch
+    color: brown
+    position: [5.0, 0.2, 0.3982575]

@@ -1,0 +1,23 @@
+scene: yolo_search_scene
+description: Flat perception test map with two differently colored chairs and one couch.
+map_label: YOLO Search Scene
+map_xml: scenes/configs/yolo_search_scene.xml
+robot_xml: third_party/quadruped_mujoco/eg/dog/xml/dog_terrain.xml
+robot_body: trunk
+robot_spawn:
+  position: [0.0, 0.0, 0.42]
+  quaternion_wxyz: [1.0, 0.0, 0.0, 0.0]
+front_camera: dog_front_camera
+objects:
+  - id: chair_green_01
+    class: chair
+    color: saturated_green
+    mesh: scenes/assets/objects/chair.obj
+  - id: chair_red_01
+    class: chair
+    color: saturated_red
+    mesh: scenes/assets/objects/chair.obj
+  - id: couch_01
+    class: couch
+    color: warm_brown
+    mesh: scenes/assets/objects/couch.obj
