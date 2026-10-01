@@ -18,6 +18,7 @@ import onnxruntime as ort
 import yaml
 
 from vision_module import VisionModule
+from motion_api import timed_vel_cmd
 
 
 # All in-repo resources are located relative to this file, so running does not
@@ -264,6 +265,7 @@ def key_callback(keycode):
         print_action_flag = not print_action_flag
     elif keycode == GLFW_KEY_X:
         _pressed_keys.clear()
+        timed_vel_cmd(0, 0, 0, duration=0, new_command=True)
     elif keycode == GLFW_KEY_SPACE and "runtime" in globals():
         runtime.request_push()
 
@@ -276,15 +278,12 @@ def key_callback(keycode):
         elif keycode == GLFW_KEY_X:
             runtime.sync_stop_to_panel()
 
-def get_commands():
-    """Return commands from the current key state — move while held, stop on release"""
-    vx = ( 1.0 if 'w' in _pressed_keys else
-          -1.0 if 's' in _pressed_keys else 0.0)
-    vy = ( 1.0 if 'a' in _pressed_keys else
-          -1.0 if 'd' in _pressed_keys else 0.0)
-    wz = ( 1.0 if 'q' in _pressed_keys else
-          -1.0 if 'e' in _pressed_keys else 0.0)
-    return np.array([vx, vy, wz], dtype=np.float32)
+def keyboard_velocity(pressed_keys):
+    """Map direction keys to a velocity request for the timed motion API."""
+    vx = 1.0 if "w" in pressed_keys else -1.0 if "s" in pressed_keys else 0.0
+    vy = 1.0 if "a" in pressed_keys else -1.0 if "d" in pressed_keys else 0.0
+    wz = 1.0 if "q" in pressed_keys else -1.0 if "e" in pressed_keys else 0.0
+    return vx, vy, wz
 
 
 def build_single_obs(quat_xyzw, omega, joint_q_isaac, joint_dq_isaac,
@@ -570,7 +569,7 @@ def main():
     print(f"\n  W/S:forward/back A/D:strafe Q/E:turn X:emergency stop"
           f" T:reset Y:print model output")
     print(f"  R:crouch↓ F:stand↑ Z:reset height (default 0.25m)")
-    print(f"  [hold to move, release to stop] global evdev listener,"
+    print(f"  [press for a 1-second move; X stops immediately] global evdev listener,"
           f" works on Wayland/X11\n")
 
     display = scene.viewer(
@@ -580,6 +579,8 @@ def main():
     vision = VisionModule()
     fpv_enabled = not args.headless
     next_low_rate_task = 0.0
+    previous_velocity_request = (0.0, 0.0, 0.0)
+    timed_vel_cmd(0, 0, 0, duration=0, new_command=True)
     with display as viewer, vision:
         # The browser and the native viewer are mutually exclusive display
         # modes, to avoid rendering twice and slowing the simulation down.
@@ -605,24 +606,41 @@ def main():
         while viewer.is_running() and time.time() - start < simulation_duration:
             step_start = time.time()
 
-            # TODO: modify cmd to move robot in x,y,z
-            # The browser and the physical keyboard both update the motion
-            # command. Without --gui the original keyboard logic is kept.
-            if runtime.update_command(_pressed_keys):
-                cmd = np.array([
+            # Both keyboard sources submit new timed velocity commands.
+            stop_requested = False
+            if runtime.panel is not None:
+                # Inspect stop before update_command consumes the panel actions.
+                with runtime.panel.lock:
+                    stop_requested = "stop" in runtime.panel.actions
+                    browser_command = runtime.update_command(_pressed_keys)
+            else:
+                browser_command = runtime.update_command(_pressed_keys)
+            if browser_command:
+                velocity_request = (
                     runtime_config["command"]["linear_x"],
                     runtime_config["command"]["linear_y"],
                     runtime_config["command"]["yaw"],
-                ], dtype=np.float32)
+                )
                 height_cmd = runtime_config["command"]["height"]
             else:
-                cmd = get_commands()
+                velocity_request = keyboard_velocity(set(_pressed_keys))
+
+            new_command = (
+                any(velocity_request)
+                and velocity_request != previous_velocity_request
+            )
+            if stop_requested:
+                cmd = timed_vel_cmd(0, 0, 0, duration=0, new_command=True)
+            else:
+                cmd = timed_vel_cmd(*velocity_request, new_command=new_command)
+            previous_velocity_request = velocity_request
 
             runtime_state = runtime.runtime_control(mj_model, mj_data)
             if runtime.consume_reset():
                 reset_flag = True
 
             if reset_flag:
+                cmd = timed_vel_cmd(0, 0, 0, duration=0, new_command=True)
                 reset_robot(
                     mj_model,
                     mj_data,
@@ -751,6 +769,7 @@ def main():
                 time.sleep(simulation_dt - elapsed)
 
     scene.close()
+    timed_vel_cmd(0, 0, 0, duration=0, new_command=True)
     print("\n[INFO] simulation finished")
 
 

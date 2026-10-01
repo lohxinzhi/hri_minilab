@@ -13,6 +13,35 @@ import play
 
 
 class PlayMapTests(unittest.TestCase):
+    def test_keyboard_directions(self):
+        self.assertEqual(play.keyboard_velocity({"w", "a", "q"}), (1, 1, 1))
+        self.assertEqual(play.keyboard_velocity({"s", "d", "e"}), (-1, -1, -1))
+        self.assertEqual(play.keyboard_velocity(set()), (0, 0, 0))
+
+    def test_held_keyboard_submits_only_one_timed_command(self):
+        with (
+            patch.object(play, "_pressed_keys", {"w"}),
+            patch.object(play, "timed_vel_cmd", wraps=play.timed_vel_cmd) as command,
+            patch.object(
+                play.sys,
+                "argv",
+                [
+                    "play.py",
+                    "--headless",
+                    "--no-policy",
+                    "--map",
+                    "coco_scene",
+                    "--duration",
+                    "0.02",
+                ],
+            ),
+            redirect_stdout(StringIO()),
+        ):
+            play.main()
+        movements = [call for call in command.call_args_list if call.args == (1, 0, 0)]
+        self.assertGreater(len(movements), 1)
+        self.assertEqual(sum(call.kwargs["new_command"] for call in movements), 1)
+
     def test_invalid_low_rates_are_rejected_before_scene_creation(self):
         for rate in ("0", "-1", "nan", "inf"):
             with (
