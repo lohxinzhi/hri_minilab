@@ -13,7 +13,7 @@ objects:
     class: chair
     color: red
     position: [3.5, -1.2, 0.4399206]
-  - id: couch_01
-    class: couch
-    color: brown
-    position: [5.0, 0.2, 0.3982575]
+  - id: ball_01
+    class: sports ball
+    color: natural
+    position: [4.0, 0.1, 0.25]

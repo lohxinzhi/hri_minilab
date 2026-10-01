@@ -3,10 +3,13 @@
 
   <asset>
     <mesh name="chair" file="chair.obj" smoothnormal="true" />
-    <mesh name="couch" file="couch.obj" smoothnormal="true" />
+    <mesh name="football" file="football.obj" smoothnormal="true" />
+    <texture name="football_diffuse_texture" type="2d"
+             file="../assets/objects/football_diffuse.png" />
     <material name="chair_green" rgba="0.02 0.82 0.04 1" specular="0.12" shininess="0.25" />
     <material name="chair_red" rgba="0.92 0.025 0.02 1" specular="0.12" shininess="0.25" />
-    <material name="couch_brown" rgba="0.48 0.29 0.16 1" specular="0.1" shininess="0.2" />
+    <material name="football_natural" texture="football_diffuse_texture"
+              rgba="1 1 1 1" specular="0.1" shininess="0.2" />
   </asset>
 
   <worldbody>
@@ -31,17 +34,11 @@
             size="0.27 0.035 0.22" rgba="0 0 0 0" />
     </body>
 
-    <body name="couch_01" pos="5.0 0.2 0" euler="0 0 1.57079632679">
-      <geom name="couch_visual" type="mesh" mesh="couch" material="couch_brown"
+    <body name="ball_01" pos="4.0 0.1 0">
+      <geom name="ball_visual" type="mesh" mesh="football" material="football_natural"
             contype="0" conaffinity="0" />
-      <geom name="couch_seat_collision" type="box" pos="0 0 0.36"
-            size="0.70 0.27 0.20" rgba="0 0 0 0" />
-      <geom name="couch_back_collision" type="box" pos="0 0.23 0.57"
-            size="0.70 0.075 0.22" rgba="0 0 0 0" />
-      <geom name="couch_left_arm_collision" type="box" pos="0.67 0 0.32"
-            size="0.10 0.27 0.28" rgba="0 0 0 0" />
-      <geom name="couch_right_arm_collision" type="box" pos="-0.67 0 0.32"
-            size="0.10 0.27 0.28" rgba="0 0 0 0" />
+      <geom name="ball_collision" type="sphere" pos="0 0 0.25"
+            size="0.25" rgba="0 0 0 0" />
     </body>
   </worldbody>
 </mujoco>

@@ -49,6 +49,8 @@ Desktop.ini
 /weights/
 /runs/
 /evaluation/results/tmp/
+# Ultralytics auto-downloads this named smoke-test model into the project root.
+/yolo11n.pt
 
 # Generated videos are untracked, but required final videos MUST enter Canvas ZIP.
 # Packaging must explicitly include Video_Task2, Video_Task3, Video_Task4

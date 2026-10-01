@@ -1,5 +1,5 @@
 scene: yolo_search_scene
-description: Flat perception test map with two differently colored chairs and one couch.
+description: Flat perception test map with two differently colored chairs and one textured sports ball.
 map_label: YOLO Search Scene
 map_xml: scenes/configs/yolo_search_scene.xml
 robot_xml: third_party/quadruped_mujoco/eg/dog/xml/dog_terrain.xml
@@ -17,7 +17,7 @@ objects:
     class: chair
     color: saturated_red
     mesh: scenes/assets/objects/chair.obj
-  - id: couch_01
-    class: couch
-    color: warm_brown
-    mesh: scenes/assets/objects/couch.obj
+  - id: ball_01
+    class: sports ball
+    color: natural
+    mesh: scenes/assets/objects/football.obj

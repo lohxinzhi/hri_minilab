@@ -10,6 +10,7 @@ is saved to outputs/scene_test/ on each run.
 from __future__ import annotations
 
 import math
+import os
 import runpy
 from pathlib import Path
 import sys
@@ -125,15 +126,26 @@ def main() -> int:
         return {map_name: runtime_control.MapSpec(scene_xml)}
 
     def project_runtime_config(**kwargs):
+        spawn_position = list(spawn["position"])
+        spawn_quaternion = list(spawn["quaternion_wxyz"])
+        position_override = os.environ.get("MINILAB_ROBOT_POSITION")
+        if position_override:
+            spawn_position = [float(value) for value in position_override.split(",")]
+            if len(spawn_position) != 3:
+                raise ValueError("MINILAB_ROBOT_POSITION must be x,y,z")
+        yaw_override = os.environ.get("MINILAB_ROBOT_YAW_DEG")
+        if yaw_override:
+            half_yaw = math.radians(float(yaw_override)) / 2.0
+            spawn_quaternion = [math.cos(half_yaw), 0.0, 0.0, math.sin(half_yaw)]
         kwargs["maps"] = {map_name: map_label}
         kwargs["map_spawns"] = {
             map_name: {
-                "position": list(spawn["position"]),
-                "quaternion": list(spawn["quaternion_wxyz"]),
+                "position": spawn_position,
+                "quaternion": spawn_quaternion,
             }
         }
-        kwargs["initial_position"] = list(spawn["position"])
-        kwargs["initial_quaternion"] = list(spawn["quaternion_wxyz"])
+        kwargs["initial_position"] = spawn_position
+        kwargs["initial_quaternion"] = spawn_quaternion
         kwargs["command"] = (0.0, 0.0, 0.0, 0.25)
         return source_runtime_config(**kwargs)
 
@@ -158,7 +170,7 @@ def main() -> int:
                 mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_MESH, i)
                 for i in range(model.nmesh)
             }
-            for required in (f"{map_name}_chair", f"{map_name}_couch"):
+            for required in (f"{map_name}_chair", f"{map_name}_football"):
                 if required not in mesh_names:
                     raise RuntimeError(f"Composed model lacks mesh {required!r}")
             mesh_geom_count = sum(
@@ -173,7 +185,7 @@ def main() -> int:
             expected_materials = {
                 "chair_green": np.array([0.02, 0.82, 0.04, 1.0]),
                 "chair_red": np.array([0.92, 0.025, 0.02, 1.0]),
-                "couch_brown": np.array([0.48, 0.29, 0.16, 1.0]),
+                "football_natural": np.array([1.0, 1.0, 1.0, 1.0]),
             }
             map_mesh_materials = set()
             for geom_id in range(model.ngeom):
@@ -203,7 +215,7 @@ def main() -> int:
             ))
             scene_logged = True
             print(f"[SCENE] loaded={map_name} objects={len(objects)}")
-            print("[SCENE] mesh_materials=green,red,warm_brown footprints=separated")
+            print("[SCENE] mesh_materials=green,red,football_diffuse_texture footprints=separated")
             for obj in objects:
                 center = " ".join(f"{v:.4f}" for v in obj["center"])
                 print(
@@ -261,7 +273,11 @@ def main() -> int:
             "increase --duration"
         )
 
-    output_path = PROJECT_ROOT / "outputs/scene_test/front_camera_scene.png"
+    output_path = Path(os.environ.get(
+        "MINILAB_SCENE_IMAGE", "outputs/scene_test/front_camera_scene.png"
+    ))
+    if not output_path.is_absolute():
+        output_path = PROJECT_ROOT / output_path
     output_path.parent.mkdir(parents=True, exist_ok=True)
     Image.fromarray(image_for_save, mode="RGB").save(output_path)
     print(
