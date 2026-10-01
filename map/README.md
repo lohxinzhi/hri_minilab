@@ -1,5 +1,7 @@
 # COCO object map
 
+![COCO object map preview](preview.png)
+
 Load `coco_scene.xml` directly with `mujoco.MjModel.from_xml_path()`.
 The scene uses meters, Z up, and static collidable objects on a ground plane.
 The six object centers are evenly spaced at 60-degree intervals around a
@@ -12,8 +14,8 @@ provides a view of the six objects.
 | `chair_blue` | chair | 56 | blue |
 | `bench` | bench | 13 | textured wood and supports |
 | `bicycle` | bicycle | 1 | yellow frame with original material colors |
-| `car` | car | 2 | Lamborghini Centenario with original textures |
-| `supra_blue` | car | 2 | Toyota Supra with blue body paint |
+| `car_1` | car | 2 | Lamborghini Centenario with original textures |
+| `car_2` | car | 2 | Toyota Supra with blue body paint |
 
 Class indices follow the Ultralytics COCO dataset:
 https://docs.ultralytics.com/datasets/detect/coco/

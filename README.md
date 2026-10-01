@@ -1,17 +1,195 @@
 # Robot dog browser dashboard
 
-Run from this directory in the `quad_mujuco` conda environment:
+## Setup on another machine
+
+The reference setup is Ubuntu 24.04 x86-64 with Python 3.11.16. The browser
+GUI still needs local OpenGL rendering for its camera feeds. A GPU is optional;
+CPU inference and software rendering are available. Other operating systems have
+not been validated for this project.
+
+### Required packages and tools
+
+These are the versions installed in the working simulation environment, rather
+than minimum supported versions or a complete lockfile. Python package dependencies
+are installed automatically by pip. All environment requirements are declared
+in [environment.yml](environment.yml).
+
+| Package/tool | Reference version | Purpose |
+| --- | --- | --- |
+| Python | 3.11.16 | Application runtime |
+| Conda | 26.5.3 | Isolated environment; Miniconda or Anaconda |
+| pip | 26.1.2 | Python package installation |
+| setuptools | 83.0.0 | Building/installing the runtime package |
+| Git | 2.43.0 | Downloading both repositories |
+| mujoco | 3.14.0 | Physics and camera rendering |
+| mujoco-runtime-control | 0.6.0 | `runtime_control`, installed from `quadruped_mujoco` |
+| numpy | 2.4.6 | Numerical operations |
+| onnxruntime | 1.30.0 | Robot locomotion policy inference |
+| PyYAML | 6.0.3 | Reading `dog.yaml` |
+| ultralytics | 8.4.166 | COCO-pretrained YOLOv8 detector |
+| torch | 2.14.0 | YOLO inference backend |
+| torchvision | 0.29.0 | PyTorch vision utilities |
+| opencv-python | 5.0.0.93 | Camera frames, annotations and JPEG encoding |
+| matplotlib | 3.11.2 | Saved heading/angular-velocity plots |
+| Pillow | 12.3.0 | Image utilities used by the runtime package |
+| glfw | 2.10.2 | MuJoCo's default rendering backend |
+| openai | 3.22.1 | Cloud LLM client |
+
+A modern browser supporting JavaScript, fetch and MJPEG streams is required.
+The dashboard was checked in Chromium; no fixed browser version is required.
+Ubuntu OpenGL/Mesa libraries come from the OS package manager and are not pinned.
+The dashboard uses Python's standard-library HTTP server: Node.js, npm, ROS and
+Isaac Gym are not needed to run this simulation. The MuJoCo Python wheel includes
+the MuJoCo library; no separate MuJoCo installation is required
+([MuJoCo installation documentation](https://mujoco.readthedocs.io/en/stable/python.html#installation)).
+
+### 1. Download the application and runtime
+
+After installing Git and Miniconda/Anaconda, run:
 
 ```bash
+mkdir -p workspace/src
+cd workspace/src
+git clone https://github.com/lohxinzhi/hri_minilab.git
+git clone https://github.com/aoqianz/quadruped_mujoco.git
+```
+
+The runtime revision inspected for these instructions is
+`dd40180f1121a66373d261e64a9a09eb69b1b2a7` (package version 0.6.0).
+For that revision, run:
+
+```bash
+git -C quadruped_mujoco checkout dd40180f1121a66373d261e64a9a09eb69b1b2a7
+```
+
+Keep the application assets in their existing relative locations:
+
+```text
+workspace/src/
+├── quadruped_mujoco/          # Provides the installed runtime_control package
+└── hri_minilab/
+    ├── play.py
+    ├── environment.yml      # Conda environment and Python dependencies
+    ├── dog.yaml
+    ├── model_3400.onnx       # Pretrained locomotion policy
+    ├── yolov8n.pt            # COCO-pretrained detector
+    ├── dog/                 # Robot MJCF and meshes
+    ├── map/                 # Scene XML and meshes/ subfolders
+    └── web/index.html       # Dashboard
+```
+
+The robot model, ONNX policy, YOLO weights and scene assets are included in the
+application repository. There is no need to download the original vehicle GLBs
+or install mesh-conversion tools. See [map/README.md](map/README.md) for asset
+sources and attribution. If `yolov8n.pt` is missing, Ultralytics downloads it on
+first use, which requires internet access.
+
+### 2. Create the Python environment
+
+From `workspace/src`, enter the application directory before creating the environment:
+
+```bash
+cd hri_minilab
+conda env create -f environment.yml
 conda activate quad_mujuco
+python -m pip check
+```
+
+The file installs Python, pip, the pinned application packages, and the sibling
+`quadruped_mujoco` checkout in editable mode. Run these commands from
+`hri_minilab` so the `../quadruped_mujoco` dependency resolves correctly.
+If the environment already exists, update it from the same file:
+
+```bash
+conda env update -n quad_mujuco -f environment.yml
+```
+
+Use the [official PyTorch installation selector](https://pytorch.org/get-started/locally/)
+if your platform needs a CPU-specific or CUDA-specific wheel index. Keep the
+`torch`/`torchvision` versions paired. This project uses CPU ONNX Runtime;
+`onnxruntime-gpu` and a CUDA toolkit are not required for the locomotion policy.
+Do not install `opencv-python-headless` alongside `opencv-python` because both
+provide the same `cv2` module.
+
+### 3. Configure rendering on Ubuntu
+
+For a desktop session with working graphics drivers, MuJoCo's default GLFW
+backend can be used. If OpenGL libraries are missing, install:
+
+```bash
+sudo apt-get update
+sudo apt-get install libgl1 libegl1 libglfw3 libosmesa6
+```
+
+For offscreen rendering without a desktop display, select EGL before launching
+Python (this is the backend used in the browser smoke checks):
+
+```bash
+export MUJOCO_GL=egl
+```
+
+EGL needs a working graphics driver. If EGL cannot initialize, use Mesa software
+rendering instead:
+
+```bash
+export MUJOCO_GL=osmesa
+```
+
+Select one backend per launch. These Linux settings should not be copied to
+Windows or macOS. Running without `--gui` does not render camera feeds.
+
+### 4. Configure the cloud LLM
+
+Set the key in the same shell that launches Python. This example reads it without
+echoing it or placing its value in shell history:
+
+```bash
+read -r -s -p "API key: " OPENAI_API_KEY
+export OPENAI_API_KEY
+printf '\n'
+export OPENAI_MODEL="gpt-6-luna"
+```
+
+`gpt-6-luna` is the application's default model name. Set `OPENAI_MODEL` to a
+model available to your account that supports the strict JSON schema used by
+the dialogue manager. For an OpenAI-compatible cloud provider, also set
+`OPENAI_BASE_URL` to its API base URL. Credentials and model access are supplied
+by the user; internet access is needed for chat requests. No API key belongs in
+the repository. The active model name is shown in the dashboard.
+
+### 5. Launch and verify
+
+From `hri_minilab`, with the environment activated:
+
+```bash
+python -c "import mujoco, numpy, onnxruntime, yaml, cv2, ultralytics, openai, matplotlib, runtime_control; print('Imports OK')"
+python -m unittest discover -s tests -v
 python play.py --map coco_scene --gui
 ```
 
-The dashboard opens automatically at `http://127.0.0.1:8765`. Use
-`--gui-port 8766` to change the port. `OPENAI_API_KEY` must be set in the
-OS environment. The dialogue integration requires the `openai` Python package
-(`pip install openai`). `OPENAI_MODEL` defaults to `gpt-6-luna`; the SDK also
-accepts `OPENAI_BASE_URL` for an OpenAI-compatible cloud endpoint.
+The dashboard opens automatically at `http://127.0.0.1:8765`. Open that URL
+manually if automatic browser launch is unavailable. Use `--gui-port 8766` for
+a different port. The server listens only on the local machine.
+
+Check that both camera feeds appear, then send a chat request such as
+`Move forward at 0.5 m/s for 2 seconds.` The simulation defaults to 300 seconds;
+use `--duration 600` to run for ten minutes. **End simulation** or Ctrl+C exits
+through the normal cleanup path and saves a timestamped plot under `plot/`.
+Closing the browser tab alone does not end the simulation.
+
+For an offline physics/policy smoke test without rendering or cloud requests:
+
+```bash
+python play.py --map coco_scene --headless --duration 5
+```
+
+If imports fail, check `which python`, activate `quad_mujuco`, and reinstall the
+runtime with `python -m pip install -e ../quadruped_mujoco` from `hri_minilab`.
+If camera rendering fails, check the graphics driver and select EGL or OSMesa
+before starting Python. If chat fails, check the API key, model access and
+optional base URL; API errors appear in the chat panel.
+
+## Using the dashboard
 
 The page shows the configured LLM model and contains:
 
@@ -81,3 +259,11 @@ Run offline tests:
 ```bash
 python -m unittest discover -s tests -v
 ```
+
+## License
+
+The project code is licensed under the [Apache License 2.0](LICENSE).
+Third-party code, pretrained model weights and object meshes retain their
+respective licenses; this license does not replace those terms. Map asset
+attributions and licenses are listed in [map/ASSET_SOURCES.md](map/ASSET_SOURCES.md).
+The `quadruped_mujoco` repository is a separate dependency with its own terms.
