@@ -38,14 +38,31 @@ class VisionModule:
         can stop streaming while continuing simulation. Labels all detections;
         selected classes get green boxes and labels, and others get grey ones.
         """
-        if self._renderer is None:
-            self._renderer = mujoco.Renderer(mj_model, height=480, width=640)
         if not self._window_open:
             cv2.namedWindow(self._window_name, cv2.WINDOW_NORMAL)
             self._window_open = True
 
+        frame = self.render_fpv(mj_model, mj_data, camera)
+        cv2.imshow(self._window_name, frame)
+        key = cv2.waitKey(1) & 0xFF
+        if (
+            key in (ord("q"), ord("Q"), 27)
+            or cv2.getWindowProperty(self._window_name, cv2.WND_PROP_VISIBLE) < 1
+        ):
+            self.close()
+            return False
+        return True
+
+    def render_frame(self, mj_model, mj_data, camera):
+        """Render an existing camera as BGR pixels without opening a window."""
+        if self._renderer is None:
+            self._renderer = mujoco.Renderer(mj_model, height=480, width=640)
         self._renderer.update_scene(mj_data, camera=camera)
-        frame = cv2.cvtColor(self._renderer.render(), cv2.COLOR_RGB2BGR)
+        return cv2.cvtColor(self._renderer.render(), cv2.COLOR_RGB2BGR)
+
+    def render_fpv(self, mj_model, mj_data, camera="dog_front_camera"):
+        """Return the annotated FPV frame for a browser feed."""
+        frame = self.render_frame(mj_model, mj_data, camera)
         detections = self.get_bbox(frame, include_labels=True)
         for detection in detections:
             selected = detection["label"] in self.COCO_SCENE_CLASSES
@@ -63,15 +80,7 @@ class VisionModule:
                 2,
                 cv2.LINE_AA,
             )
-        cv2.imshow(self._window_name, frame)
-        key = cv2.waitKey(1) & 0xFF
-        if (
-            key in (ord("q"), ord("Q"), 27)
-            or cv2.getWindowProperty(self._window_name, cv2.WND_PROP_VISIBLE) < 1
-        ):
-            self.close()
-            return False
-        return True
+        return frame
 
     def close(self) -> None:
         """Release FPV rendering resources and close the OpenCV window."""

@@ -47,6 +47,11 @@ def move(
     return _velocity.copy()
 
 
+def is_move_active() -> bool:
+    """Return whether the timed move is still running, including zero-speed waits."""
+    return time.monotonic() < _deadline
+
+
 def get_turn_target_heading() -> float | None:
     """Return the captured heading target, or None when no turn is active."""
     return _turn_target_heading if _turn_angle is not None else None

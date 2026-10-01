@@ -1,0 +1,294 @@
+"""Translate browser chat requests into validated action plans on a worker thread."""
+
+import json
+import math
+import os
+import threading
+from copy import deepcopy
+from queue import Empty, Queue
+
+from openai import OpenAI, OpenAIError
+
+SYSTEM_PROMPT = """You are the dialogue manager of a robot dog in MuJoCo.
+Convert the latest request into a JSON object containing an ordered actions list.
+Only generate the actions needed for this request; do not repeat earlier plans.
+Allowed actions:
+- {"action":"move","velocity":{"vx":0.0,"vy":0.0,"wz":0.0},"duration":1.0}
+- {"action":"turn","angle":90.0}
+- {"action":"stop"}
+- {"action":"chat","reply":"Your answer or clarification"}
+vx and vy are m/s; wz is rad/s. Positive vx is forward, positive vy is left,
+and positive wz is counterclockwise. Turns are RELATIVE degrees, positive left,
+negative right. Moves last for duration seconds (default 1 second when unspecified).
+Use ordinary walking speeds, normally at most 1 m/s and 1 rad/s, unless specified.
+Actions run sequentially; stop cancels the remainder of the list. A new plan
+replaces any unfinished earlier plan. Ask a clarification using chat when needed.
+You have no camera images or navigation: do not invent visual observations or
+object locations. Explain with chat if asked to describe the view or approach an
+object, since those actions are not implemented. Return JSON only.
+"""
+
+
+def _object_schema(properties):
+    return {
+        "type": "object",
+        "properties": properties,
+        "required": list(properties),
+        "additionalProperties": False,
+    }
+
+
+ACTION_SCHEMA = _object_schema(
+    {
+        "actions": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+                "anyOf": [
+                    _object_schema(
+                        {
+                            "action": {"type": "string", "enum": ["move"]},
+                            "velocity": _object_schema(
+                                {key: {"type": "number"} for key in ("vx", "vy", "wz")}
+                            ),
+                            "duration": {"type": "number", "minimum": 0},
+                        }
+                    ),
+                    _object_schema(
+                        {
+                            "action": {"type": "string", "enum": ["turn"]},
+                            "angle": {"type": "number"},
+                        }
+                    ),
+                    _object_schema({"action": {"type": "string", "enum": ["stop"]}}),
+                    _object_schema(
+                        {
+                            "action": {"type": "string", "enum": ["chat"]},
+                            "reply": {"type": "string"},
+                        }
+                    ),
+                ]
+            },
+        }
+    }
+)
+
+
+def validate_actions(actions):
+    """Reject malformed plans before any action can be executed."""
+    if not isinstance(actions, list) or not actions:
+        raise ValueError("actions must be a nonempty list")
+
+    def number(value):
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError("action values must be finite numbers")
+        if not math.isfinite(value):
+            raise ValueError("action values must be finite numbers")
+
+    for item in actions:
+        if not isinstance(item, dict):
+            raise TypeError("each action must be an object")
+        kind = item.get("action")
+        fields = {
+            "move": {"action", "velocity", "duration"},
+            "turn": {"action", "angle"},
+            "stop": {"action"},
+            "chat": {"action", "reply"},
+        }
+        if not isinstance(kind, str) or kind not in fields or set(item) != fields[kind]:
+            raise ValueError("unsupported action or invalid action fields")
+        if kind == "move":
+            velocity = item["velocity"]
+            if not isinstance(velocity, dict) or set(velocity) != {"vx", "vy", "wz"}:
+                raise ValueError("move velocity must contain vx, vy, wz")
+            for value in velocity.values():
+                number(value)
+            number(item["duration"])
+            if item["duration"] < 0:
+                raise ValueError("move duration must be non-negative")
+        elif kind == "turn":
+            number(item["angle"])
+        elif kind == "chat" and (
+            not isinstance(item["reply"], str) or not item["reply"].strip()
+        ):
+            raise ValueError("chat reply must be nonempty text")
+    return deepcopy(actions)
+
+
+class DialogueManager:
+    """Keep conversation history and process submitted prompts off the main loop."""
+
+    def __init__(self, model=None, *, client=None):
+        self.history = [{"role": "system", "content": SYSTEM_PROMPT}]
+        self.model = model or os.environ.get("OPENAI_MODEL", "gpt-6-luna")
+        self.client = client
+        self._owns_client = client is None
+        self._history_lock = threading.Lock()
+        self._stop = threading.Event()
+        self._thread = None
+        self._plans = Queue()
+        self._errors = Queue()
+        self._requests = Queue()
+        self._chat_lock = threading.Lock()
+        self._chat = []
+        self._next_id = 1
+
+    def submit_prompt(self, prompt):
+        """Queue a browser prompt without waiting for the cloud response."""
+        if not isinstance(prompt, str) or not prompt.strip():
+            raise ValueError("prompt must be nonempty text")
+        if len(prompt) > 8000:
+            raise ValueError("prompt must be at most 8000 characters")
+        with self._chat_lock:
+            if self._stop.is_set():
+                raise RuntimeError("dialogue manager is closed")
+            request_id = self._next_id
+            self._next_id += 1
+            self._chat.append(
+                {
+                    "id": request_id,
+                    "role": "user",
+                    "content": prompt.strip(),
+                    "status": "queued",
+                }
+            )
+            self._requests.put((request_id, prompt.strip()))
+        return request_id
+
+    def chat_snapshot(self):
+        """Copy chat messages without acquiring the API/history lock."""
+        with self._chat_lock:
+            return deepcopy(self._chat)
+
+    def _reply(self, request_id, content, status):
+        with self._chat_lock:
+            for message in self._chat:
+                if message["id"] == request_id and message["role"] == "user":
+                    message["status"] = status
+                    break
+            self._chat.append(
+                {
+                    "id": request_id,
+                    "role": "assistant",
+                    "content": content,
+                    "status": status,
+                }
+            )
+
+    @staticmethod
+    def _summarize(actions):
+        lines = []
+        for action in actions:
+            kind = action["action"]
+            if kind == "chat":
+                lines.append(action["reply"])
+            elif kind == "move":
+                v = action["velocity"]
+                lines.append(
+                    f"Move at vx={v['vx']:g}, vy={v['vy']:g} m/s, wz={v['wz']:g} rad/s for {action['duration']:g} s."
+                )
+            elif kind == "turn":
+                lines.append(
+                    f"Turn {action['angle']:g}° relative to the current heading."
+                )
+            else:
+                lines.append("Stop and cancel remaining actions.")
+                break
+        return "\n".join(lines)
+
+    def user_cmd(self, user_prompt):
+        """Append a prompt to history, call the API and return validated actions.
+
+        start() runs this on a daemon worker; browser callers use submit_prompt().
+        OPENAI_API_KEY and optional OPENAI_BASE_URL configure the SDK client.
+        """
+        if not isinstance(user_prompt, str) or not user_prompt.strip():
+            raise ValueError("user prompt must be nonempty text")
+        with self._history_lock:
+            self.history.append({"role": "user", "content": user_prompt.strip()})
+            if self.client is None:
+                self.client = OpenAI(timeout=30.0, max_retries=0)
+            completion = self.client.chat.completions.create(
+                model=self.model,
+                messages=deepcopy(self.history),
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "robot_actions",
+                        "strict": True,
+                        "schema": ACTION_SCHEMA,
+                    },
+                },
+            )
+            choice = completion.choices[0]
+            if choice.finish_reason != "stop" or choice.message.refusal:
+                raise ValueError("LLM response was incomplete or refused")
+            payload = json.loads(choice.message.content)
+            if not isinstance(payload, dict) or set(payload) != {"actions"}:
+                raise ValueError("LLM response must contain only an actions list")
+            actions = validate_actions(payload["actions"])
+            self.history.append(
+                {"role": "assistant", "content": json.dumps({"actions": actions})}
+            )
+            return actions
+
+    def start(self):
+        """Start background API processing; browser submissions remain nonblocking."""
+        if self._thread is not None:
+            raise RuntimeError("dialogue worker already started")
+        self._thread = threading.Thread(
+            target=self._run, name="robot-dialogue", daemon=True
+        )
+        self._thread.start()
+        return self
+
+    def _run(self):
+        try:
+            while not self._stop.is_set():
+                try:
+                    request = self._requests.get(timeout=0.1)
+                except Empty:
+                    continue
+                if request is None or self._stop.is_set():
+                    break
+                request_id, prompt = request
+                with self._chat_lock:
+                    for message in self._chat:
+                        if message["id"] == request_id and message["role"] == "user":
+                            message["status"] = "thinking"
+                            break
+                try:
+                    actions = self.user_cmd(prompt)
+                except (OpenAIError, ValueError, TypeError, IndexError) as exc:
+                    if not self._stop.is_set():
+                        error = f"{type(exc).__name__}: {exc}"
+                        self._errors.put(error)
+                        self._reply(request_id, error, "error")
+                    continue
+                if not self._stop.is_set():
+                    self._plans.put(actions)
+                    self._reply(request_id, self._summarize(actions), "planned")
+        finally:
+            if self._owns_client and self.client is not None:
+                self.client.close()
+
+    def poll_actions(self):
+        """Return the next action list, or None immediately if no reply is ready."""
+        try:
+            return self._plans.get_nowait()
+        except Empty:
+            return None
+
+    def poll_error(self):
+        """Return the next API error without blocking the simulation."""
+        try:
+            return self._errors.get_nowait()
+        except Empty:
+            return None
+
+    def close(self):
+        """Stop accepting replies; bounded join lets Ctrl+C exit during an API call."""
+        self._stop.set()
+        self._requests.put(None)
+        if self._thread is not None:
+            self._thread.join(timeout=0.2)

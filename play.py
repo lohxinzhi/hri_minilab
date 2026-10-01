@@ -6,21 +6,22 @@ Joint order:
   IsaacGym dof order (internally reordered): FL(0-2), FR(3-5), RL(6-8), RR(9-11)
   → The rear legs are swapped! RL/RR remapping is required!
 
-
-   sudo chmod 666 /dev/input/event*
 """
 import time
 from pathlib import Path
 import sys
 from collections import deque
 from contextlib import ExitStack
+from types import SimpleNamespace
 import mujoco
 import numpy as np
 import onnxruntime as ort
 import yaml
 
+from browser_gui import BrowserGUI, BrowserState
+from dialogue_manager import DialogueManager, validate_actions
 from vision_module import VisionModule
-from motion_api import get_turn_target_heading, move, turn
+from motion_api import get_turn_target_heading, is_move_active, move, turn
 from plot import plot_heading
 
 
@@ -72,7 +73,6 @@ MAP_SPECS["coco_scene"] = MapSpec(
 ROBOT_CAMERAS = make_standard_robot_cameras(prefix="dog")
 CAMERA_OPTIONS = standard_camera_options(prefix="dog")
 DEFAULT_LOW_HZ = 20.0
-KEYBOARD_MOVE_DURATION = 1  # Seconds per new keyboard movement command.
 TURN_TOLERANCE_DEG = 3.0  # Stop and complete turns within this heading error.
 
 
@@ -139,192 +139,16 @@ class ObsHistoryBuffer:
         self.buffer[:] = 0.0
 
 
-# ============================================================
-#  Keyboard control
-#  Movement keys (W/A/S/D/Q/E): evdev press/release listener — move while held,
-#  stop on release
-#  Function keys (R/F/Z/T/Y/X): single-shot via the MuJoCo key_callback
-# ============================================================
-
-# --- evdev: optional global keyboard input on Linux; browser control does not
-# depend on it. ---
-try:
-    import evdev
-except ImportError:
-    evdev = None
-import threading
-
-def _find_keyboards():
-    """Auto-detect keyboard devices (supporting EV_KEY with letter keys)"""
-    keyboards = []
-    if evdev is None:
-        return keyboards
-    for path in evdev.list_devices():
-        try:
-            dev = evdev.InputDevice(path)
-            caps = dev.capabilities()
-            if evdev.ecodes.EV_KEY in caps:
-                keys = caps[evdev.ecodes.EV_KEY]
-                if evdev.ecodes.KEY_W in keys:
-                    keyboards.append(dev)
-                    continue
-        except Exception:
-            pass
-    return keyboards
-
-_pressed_keys = set()   # keys currently held down (lowercase letters)
-
-# Direction key mapping: evdev scancode → direction letter
-_DIR_SCANCODES = {} if evdev is None else {
-    evdev.ecodes.KEY_W: 'w', evdev.ecodes.KEY_S: 's',
-    evdev.ecodes.KEY_A: 'a', evdev.ecodes.KEY_D: 'd',
-    evdev.ecodes.KEY_Q: 'q', evdev.ecodes.KEY_E: 'e',
-    evdev.ecodes.KEY_UP: 'w', evdev.ecodes.KEY_DOWN: 's',
-    evdev.ecodes.KEY_LEFT: 'a', evdev.ecodes.KEY_RIGHT: 'd',
-}
-
-def _evdev_keyboard_thread(dev):
-    """Background thread: read evdev keyboard events"""
-    try:
-        for event in dev.read_loop():
-            if event.type == evdev.ecodes.EV_KEY:
-                scancode = event.code
-                value = event.value  # 1=press, 0=release, 2=hold repeat
-                if scancode in _DIR_SCANCODES:
-                    d = _DIR_SCANCODES[scancode]
-                    if value == 1:      # press
-                        _pressed_keys.add(d)
-                    elif value == 0:    # release
-                        _pressed_keys.discard(d)
-    except Exception as e:
-        print(f"[KEYBOARD] evdev device read error: {e}")
-
-# Start the evdev keyboard listeners
-_kb_devs = _find_keyboards()
-
-if not _kb_devs and evdev is not None:
-    # If permissions are missing, try opening a known keyboard device directly
-    import glob, os
-    _keyboard_event = "/dev/input/event3"  # AT Translated Set 2 keyboard
-    if os.path.exists(_keyboard_event):
-        try:
-            _dev = evdev.InputDevice(_keyboard_event)
-            _kb_devs = [_dev]
-        except PermissionError:
-            print(f"\n{'='*60}")
-            print("[KEYBOARD] ⚠ Cannot access keyboard device (Permission denied)")
-            print(f"{'='*60}")
-            print("  Cause: pynput/evdev needs /dev/input access under Wayland")
-            print("  Fixes (pick one):")
-            print("")
-            print("  Option 1: add the current user to the input group"
-                  " (recommended, permanent after reboot)")
-            print("    sudo usermod -aG input $USER")
-            print("    then log out and log back in")
-            print("")
-            print("  Option 2: temporarily change device permissions"
-                  " (must be repeated after every reboot)")
-            print("    sudo chmod 666 /dev/input/event*")
-            print("")
-            print("  Option 3: run this script with sudo")
-            print(f"    sudo python3 {os.path.abspath(__file__)} ...")
-            print(f"{'='*60}\n")
-        except Exception:
-            pass
-
-for _dev in _kb_devs:
-    _t = threading.Thread(target=_evdev_keyboard_thread, args=(_dev,), daemon=True)
-    _t.start()
-
-if _kb_devs:
-    print(f"[KEYBOARD] evdev: listening on {len(_kb_devs)} keyboard device(s)")
-    for _dev in _kb_devs:
-        print(f"  - {_dev.path}: {_dev.name}")
-elif evdev is None:
-    print("[KEYBOARD] evdev not installed; browser keyboard control is available")
-
-# --- MuJoCo key_callback: function keys ---
-GLFW_KEY_R = 82;  GLFW_KEY_F = 70
-GLFW_KEY_Z = 90;  GLFW_KEY_T = 84
-GLFW_KEY_Y = 89;  GLFW_KEY_X = 88
-GLFW_KEY_SPACE = 32
-
-# Global state
+# Simulation state; all movement comes from the console action sequence.
 height_cmd = 0.25
 reset_flag = False
 print_action_flag = False
-turn_angle_deg = None
-
-
-def key_callback(keycode):
-    """MuJoCo keyboard callback — function keys only"""
-    global height_cmd, reset_flag, print_action_flag, turn_angle_deg
-    if keycode == GLFW_KEY_R:
-        height_cmd = max(0.20, height_cmd - 0.02)
-    elif keycode == GLFW_KEY_F:
-        height_cmd = min(0.35, height_cmd + 0.02)
-    elif keycode == GLFW_KEY_Z:
-        height_cmd = 0.25
-    elif keycode == GLFW_KEY_T:
-        reset_flag = True
-    elif keycode == GLFW_KEY_Y:
-        print_action_flag = not print_action_flag
-    elif keycode == GLFW_KEY_X:
-        turn_angle_deg = None
-        _pressed_keys.clear()
-        move(0, 0, 0, duration=0, new_command=True)
-    elif keycode == GLFW_KEY_SPACE and "runtime" in globals():
-        runtime.request_push()
-
-    # Keep the native viewer shortcuts in sync with the browser panel;
-    # otherwise the panel value overwrites them on the next simulation step.
-    if "runtime" in globals():
-        if keycode in (GLFW_KEY_R, GLFW_KEY_F, GLFW_KEY_Z):
-            runtime_config["command"]["height"] = height_cmd
-            runtime.sync_height_to_panel()
-        elif keycode == GLFW_KEY_X:
-            runtime.sync_stop_to_panel()
-
-def keyboard_velocity(pressed_keys):
-    """Map direction keys to a velocity request for the timed motion API."""
-    vx = 1.0 if "w" in pressed_keys else -1.0 if "s" in pressed_keys else 0.0
-    vy = 1.0 if "a" in pressed_keys else -1.0 if "d" in pressed_keys else 0.0
-    wz = 1.0 if "q" in pressed_keys else -1.0 if "e" in pressed_keys else 0.0
-    return vx, vy, wz
 
 
 def heading_deg(quaternion_wxyz):
     """Return world yaw in degrees from the robot's MuJoCo quaternion."""
     w, x, y, z = quaternion_wxyz
     return np.rad2deg(np.arctan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z)))
-
-
-def install_browser_motion_queue(panel):
-    """Preserve command arrival order before panel actions become a set."""
-    commands = deque()
-    if panel is None:
-        return commands
-    handle_post = panel._handle_post
-
-    def handle_motion_post(path, payload):
-        with panel.lock:
-            result = handle_post(path, payload)
-            if path == "/api/action":
-                action = payload.get("action", "")
-                if action.startswith("turn_"):
-                    commands.append(("turn", float(action.removeprefix("turn_"))))
-                elif action in {"stop", "reset"}:
-                    commands.append(("stop", None))
-            elif path == "/api/map":
-                commands.append(("stop", None))
-            elif path == "/api/key" and payload.get("pressed"):
-                velocity = keyboard_velocity(panel.keyboard_snapshot())
-                speeds = (panel.state["linear_x"], panel.state["linear_y"], panel.state["yaw"])
-                commands.append(("velocity", tuple(v * s for v, s in zip(velocity, speeds))))
-            return result
-
-    panel._handle_post = handle_motion_post
-    return commands
 
 
 def update_turn_command(turn_angle, current_heading, **controller_options):
@@ -342,20 +166,64 @@ def update_turn_command(turn_angle, current_heading, **controller_options):
     return turn_angle, command
 
 
-def apply_motion_events(events, turn_angle, command, current_heading):
-    """Apply ordered browser requests and return the latest active command."""
-    for kind, value in events:
-        if kind == "turn":
-            turn_angle, command = update_turn_command(
-                value, current_heading, new_command=True
+class RobotActionSequence:
+    """Execute ordered plans on the physics thread using only the motion API."""
+
+    def __init__(self):
+        self.pending = deque()
+        self.active = None
+        self.turn_angle = None
+
+    def cancel(self):
+        self.pending.clear()
+        self.active = None
+        self.turn_angle = None
+        return move(0, 0, 0, duration=0, new_command=True)
+
+    def replace(self, actions):
+        actions = validate_actions(actions)
+        self.cancel()
+        self.pending.extend(actions)
+
+    def update(self, current_heading, yaw_rate_deg_s=0.0, dt=None):
+        options = {"yaw_rate_deg_s": yaw_rate_deg_s, "dt": dt}
+        if self.active == "move":
+            command = move(0, 0, 0)
+            if is_move_active():
+                return command
+            self.active = None
+        elif self.active == "turn":
+            self.turn_angle, command = update_turn_command(
+                self.turn_angle, current_heading, **options
             )
-        elif kind == "velocity":
-            turn_angle = None
-            command = move(*value, duration=KEYBOARD_MOVE_DURATION, new_command=True)
-        else:
-            turn_angle = None
-            command = move(0, 0, 0, duration=0, new_command=True)
-    return turn_angle, command
+            if self.turn_angle is not None:
+                return command
+            self.active = None
+        while self.pending:
+            action = self.pending.popleft()
+            kind = action["action"]
+            if kind == "chat":
+                print(f"[DIALOGUE] {action['reply']}")
+                continue
+            if kind == "stop":
+                return self.cancel()
+            if kind == "move":
+                velocity = action["velocity"]
+                command = move(
+                    velocity["vx"], velocity["vy"], velocity["wz"],
+                    duration=action["duration"], new_command=True,
+                )
+                if is_move_active():
+                    self.active = "move"
+                    return command
+            elif kind == "turn":
+                self.turn_angle, command = update_turn_command(
+                    action["angle"], current_heading, new_command=True, **options
+                )
+                if self.turn_angle is not None:
+                    self.active = "turn"
+                    return command
+        return move(0, 0, 0)
 
 
 def build_single_obs(quat_xyzw, omega, joint_q_isaac, joint_dq_isaac,
@@ -429,7 +297,7 @@ def build_runtime_config(args, kps, kds):
     initial_map = args.map
     map_labels = {initial_map: map_labels[initial_map], **map_labels}
     return make_runtime_config(
-        gui=args.gui,
+        gui=False,
         title="Dog MuJoCo Live Tuning",
         maps=map_labels,
         map_spawns=map_spawns,
@@ -441,10 +309,7 @@ def build_runtime_config(args, kps, kds):
         command=(1.0, 1.0, 1.0, 0.25),
         height_range=(0.2, 0.35),
         cameras=CAMERA_OPTIONS,
-        actions=[
-            {"key": f"turn_{key * 10}", "label": f"Turn +{key * 10} deg", "shortcut": str(key)}
-            for key in range(1, 10)
-        ],
+        actions=[],
         port=args.gui_port,
         tracking_camera={
             "camera_distance": 2.0,
@@ -469,9 +334,9 @@ def build_runtime_config(args, kps, kds):
     )
 
 
-def main():
+def run_simulation(browser_state):
     """Parse launch options and run the robot simulation."""
-    global height_cmd, reset_flag, print_action_flag, runtime, runtime_config, turn_angle_deg
+    global height_cmd, reset_flag, print_action_flag, runtime, runtime_config
 
     import argparse
     parser = argparse.ArgumentParser()
@@ -492,7 +357,7 @@ def main():
     parser.add_argument(
         "--headless",
         action="store_true",
-        help="open neither the browser nor the native viewer; for automated checks",
+        help="run without browser rendering; for automated checks",
     )
     parser.add_argument(
         "--duration",
@@ -507,9 +372,9 @@ def main():
     parser.add_argument(
         "--gui",
         action="store_true",
-        help="enable only the browser live-tuning panel (no native MuJoCo viewer)",
+        help="open the robot dashboard with follow camera, FPV, chat and logs",
     )
-    parser.add_argument("--gui-port", type=int, default=8765, help="browser panel port")
+    parser.add_argument("--gui-port", type=int, default=8765, help="robot dashboard port")
     parser.add_argument(
         "--low_hz",
         type=float,
@@ -589,7 +454,6 @@ def main():
     mj_model.opt.timestep = simulation_dt
     mj_data = scene.data
     runtime = scene.runtime
-    browser_motion_commands = install_browser_motion_queue(runtime.panel)
     motor_delay = MotorCommandDelay(simulation_dt)
 
     print(f"\n[VERIFY] MuJoCo joint order:")
@@ -643,22 +507,25 @@ def main():
         obs_history.push(obs)
 
     print(f"[INFO] warm-up done, norm={np.linalg.norm(obs_history.buffer):.4f}")
-    print(f"\n  W/S:forward/back A/D:strafe Q/E:turn X:emergency stop"
-          f" T:reset Y:print model output")
-    print(f"  R:crouch↓ F:stand↑ Z:reset height (default 0.25m)")
-    print("  Browser only: 1–9 request relative turns of +10–90 degrees")
-    print(f"  [press for a {KEYBOARD_MOVE_DURATION:g}-second move; X stops immediately] global evdev listener,"
-          f" works on Wayland/X11\n")
-
-    display = scene.viewer(
-        args.gui or args.headless,
-        key_callback=key_callback,
-    )
+    display = scene.viewer(True)
+    dialogue = DialogueManager()
+    sequence = RobotActionSequence()
     vision = VisionModule()
-    fpv_enabled = not args.headless
+    gui = BrowserGUI(browser_state, dialogue, args.gui_port) if args.gui else None
+    # Reuse the runtime's third-person tracking camera and existing robot FPV.
+    follow_camera = mujoco.MjvCamera()
+    setup_tracking_camera(
+        SimpleNamespace(cam=follow_camera),
+        mj_model, "trunk", distance=2.0, azimuth=135.0, elevation=-25.0,
+    )
+
+    def publish_views():
+        browser_state.publish_frame(
+            "follow", vision.render_frame(mj_model, mj_data, follow_camera)
+        )
+        browser_state.publish_frame("fpv", vision.render_fpv(mj_model, mj_data))
+
     next_low_rate_task = 0.0
-    previous_velocity_request = (0.0, 0.0, 0.0)
-    turn_angle_deg = None
     previous_heading = heading_deg(mj_data.qpos[3:7])
     move(0, 0, 0, duration=0, new_command=True)
     heading_times = [0.0]
@@ -678,94 +545,49 @@ def main():
         cleanup.callback(scene.close)
         cleanup.callback(move, 0, 0, 0, duration=0, new_command=True)
         cleanup.callback(save_heading_plot)
-        # The browser and the native viewer are mutually exclusive display
-        # modes, to avoid rendering twice and slowing the simulation down.
-        if not args.gui and not args.headless:
-            setup_tracking_camera(
-                viewer,
-                mj_model,
-                "trunk",
-                distance=2.0,
-                azimuth=135.0,
-                elevation=-25.0,
-            )
-
-        # Initialize GLFW on the main thread before the browser renderer starts.
-        # Concurrent first-time initialization in both threads can abort GLFW.
-        if fpv_enabled:
+        cleanup.callback(dialogue.close)
+        if gui is not None:
+            cleanup.callback(gui.close)
             runtime.maps.activate(mj_model, mj_data, args.map)
-            fpv_enabled = vision.stream_fpv(mj_model, mj_data)
+            publish_views()
+            gui.start()
             next_low_rate_task = time.monotonic() + low_rate_interval
-
-        # Model loading and the first inference should not consume run duration.
+        else:
+            print("[INFO] Browser rendering is disabled. Launch with --gui to chat with the robot.")
+        dialogue.start()
         start = time.time()
         heading_start = time.monotonic()
-        while viewer.is_running() and time.time() - start < simulation_duration:
+        while viewer.is_running() and browser_state.running and time.time() - start < simulation_duration:
             step_start = time.time()
 
-            # Both keyboard sources submit new timed velocity commands.
-            stop_requested = False
-            if runtime.panel is not None:
-                # Inspect stop before update_command consumes the panel actions.
-                with runtime.panel.lock:
-                    stop_requested = "stop" in runtime.panel.actions
-                    browser_command = runtime.update_command(_pressed_keys)
-            else:
-                browser_command = runtime.update_command(_pressed_keys)
-            if browser_command:
-                velocity_request = (
-                    runtime_config["command"]["linear_x"],
-                    runtime_config["command"]["linear_y"],
-                    runtime_config["command"]["yaw"],
-                )
-                height_cmd = runtime_config["command"]["height"]
-            else:
-                velocity_request = keyboard_velocity(set(_pressed_keys))
+            # Poll completed dialogue plans without waiting for console or API I/O.
+            # If multiple replies arrived, the latest plan overrides previous work.
+            while (actions := dialogue.poll_actions()) is not None:
+                sequence.replace(actions)
+                print(f"[ACTIONS] {actions}")
+            while (error := dialogue.poll_error()) is not None:
+                print(f"[DIALOGUE] {error}")
 
-            new_command = (
-                any(velocity_request)
-                and velocity_request != previous_velocity_request
-            )
-            if stop_requested:
-                turn_angle_deg = None
-                cmd = move(0, 0, 0, duration=0, new_command=True)
-            else:
-                if new_command:
-                    turn_angle_deg = None
-                cmd = move(
-                    *velocity_request,
-                    duration=KEYBOARD_MOVE_DURATION,
-                    new_command=new_command,
-                )
-            previous_velocity_request = velocity_request
-
-            if runtime.panel is not None:
-                with runtime.panel.lock:
-                    motion_events = list(browser_motion_commands)
-                    browser_motion_commands.clear()
-                # Process every event in arrival order: the latest wins.
-                turn_angle_deg, cmd = apply_motion_events(
-                    motion_events, turn_angle_deg, cmd, heading_deg(mj_data.qpos[3:7])
-                )
-                runtime.consume_actions()
+            if browser_state.stop_requested.is_set():
+                browser_state.stop_requested.clear()
+                sequence.cancel()
+                print("[ACTION] Robot stopped from dashboard.")
 
             current_heading = heading_deg(mj_data.qpos[3:7])
             heading_change = (current_heading - previous_heading + 180) % 360 - 180
             previous_heading = current_heading
-            if turn_angle_deg is not None:
-                turn_angle_deg, cmd = update_turn_command(
-                    turn_angle_deg, current_heading,
-                    yaw_rate_deg_s=heading_change / simulation_dt,
-                    dt=simulation_dt,
-                )
+            cmd = sequence.update(
+                current_heading,
+                yaw_rate_deg_s=heading_change / simulation_dt,
+                dt=simulation_dt,
+            )
 
             runtime_state = runtime.runtime_control(mj_model, mj_data)
             if runtime.consume_reset():
                 reset_flag = True
 
             if reset_flag:
-                turn_angle_deg = None
-                cmd = move(0, 0, 0, duration=0, new_command=True)
+                cmd = sequence.cancel()
                 reset_robot(
                     mj_model,
                     mj_data,
@@ -886,15 +708,13 @@ def main():
                       f"grav_z={grav[2]:.3f} "
                       f"act=[{action_isaac.min():.2f},{action_isaac.max():.2f}]")
 
-            if not args.gui and not args.headless:
-                viewer.sync()
             # low_rate_task: tasks sharing the configured --low_hz rate.
             now = time.monotonic()
             if now >= next_low_rate_task:
-                if fpv_enabled:
-                    fpv_enabled = vision.stream_fpv(mj_model, mj_data)
+                if gui is not None:
+                    publish_views()
 
-                # Add other low-rate tasks here, outside the FPV condition.
+                # Add other low-rate tasks here, outside the GUI condition.
                 # Schedule after completion to avoid catch-up bursts.
                 next_low_rate_task = time.monotonic() + low_rate_interval
             elapsed = time.time() - step_start
@@ -902,6 +722,13 @@ def main():
                 time.sleep(simulation_dt - elapsed)
 
     print("\n[INFO] simulation finished")
+
+
+def main():
+    """Capture Python print output for the browser for the entire run."""
+    browser_state = BrowserState()
+    with browser_state.capture_logs():
+        return run_simulation(browser_state)
 
 
 if __name__ == "__main__":

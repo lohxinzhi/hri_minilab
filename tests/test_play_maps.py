@@ -3,18 +3,24 @@
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
-from threading import RLock
 from types import SimpleNamespace
 from unittest.mock import patch
 
 import numpy as np
 from runtime_control import RuntimeControl, RuntimeScene
-from runtime_control.panel import RuntimeControlPanel
 
 import play
 
 
 class PlayMapTests(unittest.TestCase):
+    def setUp(self):
+        self.dialogue_patch = patch.object(play, "DialogueManager")
+        self.dialogue = self.dialogue_patch.start().return_value
+        self.dialogue.poll_actions.return_value = None
+        self.dialogue.poll_error.return_value = None
+        self.addCleanup(self.dialogue_patch.stop)
+        self.addCleanup(play.move, 0, 0, 0, duration=0, new_command=True)
+
     def test_turn_completes_within_configurable_tolerance(self):
         for tolerance, start, current in [(3.0, 0, 87.1), (5.0, 179, -95.9)]:
             with (
@@ -22,9 +28,7 @@ class PlayMapTests(unittest.TestCase):
                 patch.object(play, "TURN_TOLERANCE_DEG", tolerance),
                 redirect_stdout(StringIO()),
             ):
-                angle, command = play.apply_motion_events(
-                    [("turn", 90)], None, np.zeros(3), start
-                )
+                angle, command = play.update_turn_command(90, start, new_command=True)
                 self.assertEqual(angle, 90)
                 self.assertGreater(command[2], 0)
                 angle, command = play.update_turn_command(angle, current)
@@ -61,47 +65,20 @@ class PlayMapTests(unittest.TestCase):
             len(times), len(save_plot.call_args.kwargs["angular_velocities"])
         )
 
-    def test_yaw_shortcuts_and_quaternion_heading(self):
+    def test_no_keyboard_shortcuts_and_quaternion_heading(self):
         config = self.make_config("coco_scene")
-        for key in range(1, 10):
-            self.assertEqual(
-                config["runtime_actions"][f"turn_{key * 10}"]["shortcut"], str(key)
-            )
+        self.assertFalse(config["runtime_actions"])
         self.assertAlmostEqual(play.heading_deg([np.sqrt(0.5), 0, 0, np.sqrt(0.5)]), 90)
 
-    def test_browser_command_order_and_latest_override(self):
-        # Use the real POST validation without starting a server or browser.
-        panel = RuntimeControlPanel.__new__(RuntimeControlPanel)
-        panel.lock = RLock()
-        panel.actions, panel.pressed_keys = set(), set()
-        panel.allowed_actions = {"turn_10", "turn_90", "stop"}
-        panel.state = {"linear_x": 1, "linear_y": 1, "yaw": 1}
-        events = play.install_browser_motion_queue(panel)
-        panel._handle_post("/api/action", {"action": "turn_10"})
-        panel._handle_post("/api/key", {"key": "w", "pressed": True})
-        self.assertEqual(list(events), [("turn", 10), ("velocity", (1, 0, 0))])
-        target, command = play.apply_motion_events(events, None, np.zeros(3), 60)
-        self.assertIsNone(target)
-        np.testing.assert_array_equal(command, [1, 0, 0])
-        panel._handle_post("/api/action", {"action": "turn_90"})
-        target, command = play.apply_motion_events(events, None, np.zeros(3), 60)
-        self.assertEqual(target, 90)
-        self.assertGreater(command[2], 0)
-        panel._handle_post("/api/action", {"action": "stop"})
-        target, command = play.apply_motion_events(events, target, command, 60)
-        self.assertIsNone(target)
-        np.testing.assert_array_equal(command, [0, 0, 0])
+    def test_legacy_browser_panel_is_disabled(self):
+        args = SimpleNamespace(map="coco_scene", gui=True, gui_port=8765)
+        config = play.build_runtime_config(args, [40.0], [1.0])
+        self.assertFalse(config["_runtime_gui"])
 
-    def test_keyboard_directions(self):
-        self.assertEqual(play.keyboard_velocity({"w", "a", "q"}), (1, 1, 1))
-        self.assertEqual(play.keyboard_velocity({"s", "d", "e"}), (-1, -1, -1))
-        self.assertEqual(play.keyboard_velocity(set()), (0, 0, 0))
-
-    def test_held_keyboard_submits_only_one_timed_command(self):
+    def test_main_polls_dialogue_and_executes_actions_on_main_thread(self):
         with (
-            patch.object(play, "KEYBOARD_MOVE_DURATION", 2.5),
-            patch.object(play, "_pressed_keys", {"w"}),
-            patch.object(play, "move", wraps=play.move) as command,
+            patch.object(play, "DialogueManager") as constructor,
+            patch.object(play, "move", wraps=play.move) as move,
             patch.object(
                 play.sys,
                 "argv",
@@ -117,20 +94,27 @@ class PlayMapTests(unittest.TestCase):
             ),
             redirect_stdout(StringIO()),
         ):
+            dialogue = constructor.return_value
+            dialogue.poll_actions.side_effect = lambda: None
+            plan = [
+                {
+                    "action": "move",
+                    "velocity": {"vx": 0.4, "vy": 0, "wz": 0},
+                    "duration": 2.5,
+                }
+            ]
+            ready = [plan]
+            dialogue.poll_actions.side_effect = lambda: ready.pop() if ready else None
+            dialogue.poll_error.return_value = None
             play.main()
-        movements = [call for call in command.call_args_list if call.args == (1, 0, 0)]
-        self.assertGreater(len(movements), 1)
-        self.assertEqual(sum(call.kwargs["new_command"] for call in movements), 1)
-        self.assertTrue(all(call.kwargs["duration"] == 2.5 for call in movements))
-
-    def test_browser_move_uses_keyboard_duration(self):
-        with (
-            patch.object(play, "KEYBOARD_MOVE_DURATION", 2.5),
-            patch.object(play, "move", wraps=play.move) as command,
-        ):
-            play.apply_motion_events([("velocity", (1, 0, 0))], None, np.zeros(3), 0)
-        command.assert_called_once_with(1, 0, 0, duration=2.5, new_command=True)
-        play.move(0, 0, 0, duration=0, new_command=True)
+        constructor.return_value.start.assert_called_once()
+        constructor.return_value.close.assert_called_once()
+        self.assertTrue(
+            any(
+                call.args == (0.4, 0, 0) and call.kwargs.get("duration") == 2.5
+                for call in move.call_args_list
+            )
+        )
 
     def test_invalid_low_rates_are_rejected_before_scene_creation(self):
         for rate in ("0", "-1", "nan", "inf"):
@@ -175,19 +159,14 @@ class PlayMapTests(unittest.TestCase):
             self.assertGreater(geom.contype[0], 0)
             self.assertTrue(np.isfinite(scene.data.qpos).all())
 
-    def test_gui_initializes_fpv_before_runtime_updates(self):
-        make_config = play.make_runtime_config
-        update_runtime = RuntimeControl.runtime_control
-
-        def config_without_browser(**kwargs):
-            kwargs["gui"] = False
-            return make_config(**kwargs)
-
+    def test_gui_uses_two_browser_feeds_without_native_or_cv2_windows(self):
+        viewer = RuntimeScene.viewer
         with (
             patch.object(play, "VisionModule") as constructor,
+            patch.object(play, "BrowserGUI") as gui_constructor,
             patch.object(
-                play, "make_runtime_config", side_effect=config_without_browser
-            ),
+                RuntimeScene, "viewer", autospec=True, side_effect=viewer
+            ) as make_viewer,
             patch.object(
                 play.sys,
                 "argv",
@@ -206,20 +185,20 @@ class PlayMapTests(unittest.TestCase):
             redirect_stdout(StringIO()),
         ):
             vision = constructor.return_value
-            vision.stream_fpv.return_value = True
-
-            def update_after_fpv(runtime, model, data):
-                self.assertGreater(vision.stream_fpv.call_count, 0)
-                return update_runtime(runtime, model, data)
-
-            with patch.object(
-                RuntimeControl,
-                "runtime_control",
-                autospec=True,
-                side_effect=update_after_fpv,
-            ) as update:
-                play.main()
-                self.assertGreater(update.call_count, 0)
+            vision.render_frame.return_value = np.zeros((48, 64, 3), dtype=np.uint8)
+            vision.render_fpv.return_value = np.zeros((48, 64, 3), dtype=np.uint8)
+            play.main()
+            self.assertGreater(vision.render_fpv.call_count, 0)
+            self.assertGreater(vision.render_frame.call_count, 0)
+            vision.stream_fpv.assert_not_called()
+            self.assertTrue(make_viewer.call_args.args[1])
+            gui_constructor.return_value.start.assert_called_once()
+            gui_constructor.return_value.close.assert_called_once()
+            state = gui_constructor.call_args.args[0]
+            self.assertEqual(set(state.frames), {"follow", "fpv"})
+            self.assertTrue(
+                any("warm-up" in log["text"] for log in state.snapshot()["logs"])
+            )
 
 
 if __name__ == "__main__":
