@@ -18,3 +18,6 @@ htmlcov/
 
 # Model weights
 .pt
+
+# Generated plots
+/plot/

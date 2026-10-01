@@ -13,13 +13,15 @@ import time
 from pathlib import Path
 import sys
 from collections import deque
+from contextlib import ExitStack
 import mujoco
 import numpy as np
 import onnxruntime as ort
 import yaml
 
 from vision_module import VisionModule
-from motion_api import move, turn
+from motion_api import get_turn_target_heading, move, turn
+from plot import plot_heading
 
 
 # All in-repo resources are located relative to this file, so running does not
@@ -641,7 +643,19 @@ def main():
     turn_angle_deg = None
     previous_heading = heading_deg(mj_data.qpos[3:7])
     move(0, 0, 0, duration=0, new_command=True)
-    with display as viewer, vision:
+    heading_times = [0.0]
+    heading_history = [previous_heading]
+    heading_commands = [None]
+
+    def save_heading_plot():
+        path = plot_heading(heading_times, heading_history, heading_commands)
+        print(f"[PLOT] saved {path}")
+
+    with ExitStack() as cleanup, display as viewer, vision:
+        # Save collected samples on normal exit, Ctrl+C, or a loop exception.
+        cleanup.callback(scene.close)
+        cleanup.callback(move, 0, 0, 0, duration=0, new_command=True)
+        cleanup.callback(save_heading_plot)
         # The browser and the native viewer are mutually exclusive display
         # modes, to avoid rendering twice and slowing the simulation down.
         if not args.gui and not args.headless:
@@ -663,6 +677,7 @@ def main():
 
         # Model loading and the first inference should not consume run duration.
         start = time.time()
+        heading_start = time.monotonic()
         while viewer.is_running() and time.time() - start < simulation_duration:
             step_start = time.time()
 
@@ -828,6 +843,9 @@ def main():
 
             runtime.apply_external_forces(mj_model, mj_data)
             mujoco.mj_step(mj_model, mj_data)
+            heading_times.append(time.monotonic() - heading_start)
+            heading_history.append(heading_deg(mj_data.qpos[3:7]))
+            heading_commands.append(get_turn_target_heading())
             count += 1
 
             if count % (control_decimation * 50) == 0:
@@ -853,8 +871,6 @@ def main():
             if simulation_dt - elapsed > 0:
                 time.sleep(simulation_dt - elapsed)
 
-    scene.close()
-    move(0, 0, 0, duration=0, new_command=True)
     print("\n[INFO] simulation finished")
 
 

@@ -15,6 +15,22 @@ import play
 
 
 class PlayMapTests(unittest.TestCase):
+    def test_heading_plot_saved_on_keyboard_interrupt(self):
+        with (
+            patch.object(play.sys, "argv", ["play.py", "--headless", "--no-policy"]),
+            patch.object(
+                RuntimeControl, "runtime_control", side_effect=KeyboardInterrupt
+            ),
+            patch.object(play, "plot_heading") as save_plot,
+            redirect_stdout(StringIO()),
+            self.assertRaises(KeyboardInterrupt),
+        ):
+            play.main()
+        save_plot.assert_called_once()
+        times, headings, commands = save_plot.call_args.args
+        self.assertEqual(len(times), len(headings))
+        self.assertEqual(len(times), len(commands))
+
     def test_yaw_shortcuts_and_quaternion_heading(self):
         config = self.make_config("coco_scene")
         for key in range(1, 10):
