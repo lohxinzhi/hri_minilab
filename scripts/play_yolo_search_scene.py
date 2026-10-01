@@ -111,7 +111,7 @@ def _rotation_tilt(quaternion_wxyz):
     return math.acos(cos_tilt)
 
 
-def main() -> int:
+def main(frame_callback=None, upstream_args=None) -> int:
     if not PLAYER_PATH.is_file():
         raise FileNotFoundError(f"Pinned upstream player not found: {PLAYER_PATH}")
     config, scene_xml, objects = _scene_description()
@@ -224,7 +224,10 @@ def main() -> int:
                 )
 
         camera = cameras[0]
-        camera.update(data)
+        frame_captured = camera.update(data)
+        if frame_captured and frame_callback is not None and data.time >= capture_after_time:
+            # The callback receives only FrontCamera's dog_front_camera RGB frame.
+            frame_callback(camera.get_latest_frame(copy=False), float(data.time))
         if data.time >= capture_after_time and image_for_save is None:
             frame = camera.get_latest_frame(copy=True)
             if frame is not None:
@@ -237,7 +240,7 @@ def main() -> int:
         if data.qpos.size >= 7:
             state_for_check = data.qpos[:7].copy()
 
-    args = sys.argv[1:]
+    args = list(sys.argv[1:] if upstream_args is None else upstream_args)
     if "--duration" not in args:
         args += ["--duration", "3"]
     sys.argv = [str(PLAYER_PATH), *args]
