@@ -65,5 +65,54 @@ class GetBboxTests(unittest.TestCase):
             constructor.assert_not_called()
 
 
+class FpvStreamTests(unittest.TestCase):
+    def test_camera_renderer_reuse_and_rgb_conversion(self):
+        rgb = np.array([[[255, 10, 20]]], dtype=np.uint8)
+        model, data = Mock(), Mock()
+        with (
+            patch.object(vision_module.mujoco, "Renderer") as constructor,
+            patch.object(vision_module.cv2, "namedWindow") as create_window,
+            patch.object(vision_module.cv2, "imshow") as show,
+            patch.object(vision_module.cv2, "waitKey", return_value=-1),
+            patch.object(vision_module.cv2, "getWindowProperty", return_value=1),
+            patch.object(vision_module.cv2, "destroyWindow") as destroy,
+            vision_module.VisionModule() as vision,
+        ):
+            renderer = constructor.return_value
+            renderer.render.return_value = rgb
+            self.assertTrue(vision.stream_fpv(model, data))
+            self.assertTrue(vision.stream_fpv(model, data))
+            constructor.assert_called_once_with(model, height=480, width=640)
+            create_window.assert_called_once()
+            renderer.update_scene.assert_called_with(data, camera="dog_front_camera")
+            np.testing.assert_array_equal(
+                show.call_args.args[1], np.array([[[20, 10, 255]]], dtype=np.uint8)
+            )
+        renderer.close.assert_called_once()
+        destroy.assert_called_once()
+
+    def test_exit_keys_and_window_close_release_resources(self):
+        for key, visible in ((ord("q"), 1), (27, 1), (-1, 0)):
+            with (
+                self.subTest(key=key, visible=visible),
+                patch.object(vision_module.mujoco, "Renderer") as constructor,
+                patch.object(vision_module.cv2, "namedWindow"),
+                patch.object(vision_module.cv2, "imshow"),
+                patch.object(vision_module.cv2, "waitKey", return_value=key),
+                patch.object(
+                    vision_module.cv2, "getWindowProperty", return_value=visible
+                ),
+                patch.object(vision_module.cv2, "destroyWindow") as destroy,
+            ):
+                constructor.return_value.render.return_value = np.zeros(
+                    (2, 2, 3), dtype=np.uint8
+                )
+                vision = vision_module.VisionModule()
+                self.assertFalse(vision.stream_fpv(Mock(), Mock()))
+                vision.close()
+                constructor.return_value.close.assert_called_once()
+                destroy.assert_called_once()
+
+
 if __name__ == "__main__":
     unittest.main()

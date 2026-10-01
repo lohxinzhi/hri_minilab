@@ -1,10 +1,13 @@
 """Check COCO map registration and robot scene compatibility."""
 
 import unittest
+from contextlib import redirect_stdout
+from io import StringIO
 from types import SimpleNamespace
+from unittest.mock import patch
 
 import numpy as np
-from runtime_control import RuntimeScene
+from runtime_control import RuntimeControl, RuntimeScene
 
 import play
 
@@ -39,6 +42,50 @@ class PlayMapTests(unittest.TestCase):
             geom = scene.model.geom("map_coco_scene_0")
             self.assertGreater(geom.contype[0], 0)
             self.assertTrue(np.isfinite(scene.data.qpos).all())
+
+    def test_gui_initializes_fpv_before_runtime_updates(self):
+        make_config = play.make_runtime_config
+        update_runtime = RuntimeControl.runtime_control
+
+        def config_without_browser(**kwargs):
+            kwargs["gui"] = False
+            return make_config(**kwargs)
+
+        with (
+            patch.object(play, "VisionModule") as constructor,
+            patch.object(
+                play, "make_runtime_config", side_effect=config_without_browser
+            ),
+            patch.object(
+                play.sys,
+                "argv",
+                [
+                    "play.py",
+                    "--gui",
+                    "--map",
+                    "coco_scene",
+                    "--no-policy",
+                    "--duration",
+                    "0.02",
+                ],
+            ),
+            redirect_stdout(StringIO()),
+        ):
+            vision = constructor.return_value
+            vision.stream_fpv.return_value = True
+
+            def update_after_fpv(runtime, model, data):
+                self.assertGreater(vision.stream_fpv.call_count, 0)
+                return update_runtime(runtime, model, data)
+
+            with patch.object(
+                RuntimeControl,
+                "runtime_control",
+                autospec=True,
+                side_effect=update_after_fpv,
+            ) as update:
+                play.main()
+                self.assertGreater(update.call_count, 0)
 
 
 if __name__ == "__main__":

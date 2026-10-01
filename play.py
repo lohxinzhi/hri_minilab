@@ -17,6 +17,8 @@ import numpy as np
 import onnxruntime as ort
 import yaml
 
+from vision_module import VisionModule
+
 
 # All in-repo resources are located relative to this file, so running does not
 # depend on the current working directory or machine-specific absolute paths.
@@ -565,7 +567,10 @@ def main():
         args.gui or args.headless,
         key_callback=key_callback,
     )
-    with display as viewer:
+    vision = VisionModule()
+    fpv_enabled = not args.headless
+    next_fpv_frame = 0.0
+    with display as viewer, vision:
         # The browser and the native viewer are mutually exclusive display
         # modes, to avoid rendering twice and slowing the simulation down.
         if not args.gui and not args.headless:
@@ -579,6 +584,12 @@ def main():
             )
 
         start = time.time()
+
+        # Initialize GLFW on the main thread before the browser renderer starts.
+        # Concurrent first-time initialization in both threads can abort GLFW.
+        if fpv_enabled:
+            fpv_enabled = vision.stream_fpv(mj_model, mj_data)
+            next_fpv_frame = time.monotonic() + 1.0 / 30.0
 
         while viewer.is_running() and time.time() - start < simulation_duration:
             step_start = time.time()
@@ -715,6 +726,11 @@ def main():
 
             if not args.gui and not args.headless:
                 viewer.sync()
+            # Render FPV at 30 Hz instead of at the physics update rate.
+            now = time.monotonic()
+            if fpv_enabled and now >= next_fpv_frame:
+                fpv_enabled = vision.stream_fpv(mj_model, mj_data)
+                next_fpv_frame = now + 1.0 / 30.0
             elapsed = time.time() - step_start
             if simulation_dt - elapsed > 0:
                 time.sleep(simulation_dt - elapsed)
