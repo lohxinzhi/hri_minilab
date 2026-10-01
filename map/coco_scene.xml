@@ -1,100 +1,85 @@
 <mujoco model="COCO object map">
-  <compiler angle="degree"/>
-  <option timestep="0.002" gravity="0 0 -9.81"/>
-  <statistic center="0 0 0.6" extent="5"/>
+  <compiler angle="degree" meshdir="meshes" texturedir="meshes" />
+  <option timestep="0.002" gravity="0 0 -9.81" />
+  <statistic center="0 0 0.6" extent="5" />
   <visual>
-    <global azimuth="135" elevation="-25"/>
-    <quality shadowsize="2048"/>
-    <headlight ambient="0.35 0.35 0.35" diffuse="0.6 0.6 0.6"/>
+    <global azimuth="135" elevation="-25" />
+    <quality shadowsize="2048" />
+    <headlight ambient="0.35 0.35 0.35" diffuse="0.6 0.6 0.6" />
   </visual>
-  <default>
-    <geom friction="0.8 0.01 0.001" condim="3"/>
-    <default class="chair">
-      <geom type="box" material="red"/>
-    </default>
-    <default class="bench">
-      <geom type="box" material="wood"/>
-    </default>
-    <default class="cup_wall">
-      <geom type="capsule" size="0.012" material="ceramic"/>
-    </default>
-  </default>
   <asset>
-    <texture name="ground_checker" type="2d" builtin="checker"
-             rgb1="0.72 0.74 0.76" rgb2="0.82 0.84 0.86" width="256" height="256"/>
-    <material name="ground" texture="ground_checker" texrepeat="8 8" reflectance="0.05"/>
-    <material name="red" rgba="0.8 0.06 0.04 1"/>
-    <material name="blue" rgba="0.04 0.18 0.85 1"/>
-    <material name="wood" rgba="0.5 0.28 0.12 1"/>
-    <material name="metal" rgba="0.2 0.22 0.24 1"/>
-    <material name="green" rgba="0.06 0.5 0.18 1" specular="0.5" shininess="0.7"/>
-    <material name="ceramic" rgba="0.96 0.9 0.7 1"/>
+    <texture name="ground_checker" type="2d" builtin="checker" rgb1="0.72 0.74 0.76" rgb2="0.82 0.84 0.86" width="256" height="256" />
+    <material name="ground" texture="ground_checker" texrepeat="8 8" reflectance="0.05" />
+    <material name="red" rgba="0.8 0.06 0.04 1" />
+    <material name="blue" rgba="0.04 0.18 0.85 1" />
+    <material name="wood" rgba="0.5 0.28 0.12 1" />
+    <material name="metal" rgba="0.2 0.22 0.24 1" />
+    <material name="green" rgba="0.06 0.5 0.18 1" specular="0.5" shininess="0.7" />
+    <material name="ceramic" rgba="0.96 0.9 0.7 1" />
+    <mesh name="chair_mesh" file="chair.obj" />
+    <mesh name="bench_mesh" file="bench.obj" />
+    <texture name="bench_texture" type="2d" file="bench_texture.png" />
+    <material name="bench_surface" texture="bench_texture" texuniform="false" rgba="1 1 1 1" />
+    <mesh name="cup_mesh" file="cup.obj" />
+    <mesh name="bottle_mesh" file="bottle.obj" />
+    <texture name="bottle_texture" type="2d" file="bottle_texture.png" />
+    <material name="bottle_surface" texture="bottle_texture" texuniform="false" rgba="1 1 1 1" />
   </asset>
   <worldbody>
-    <light name="key" pos="-3 -4 6" dir="0.3 0.4 -1" directional="true"/>
-    <light name="fill" pos="3 2 5" dir="-0.3 -0.2 -1" diffuse="0.4 0.4 0.4"/>
-    <camera name="overview" pos="4 -6 4" xyaxes="0.83205 0.5547 0 -0.267 0.400 0.876"/>
-    <geom name="floor" type="plane" size="4 4 0.05" material="ground"/>
-
+    <light name="key" pos="-3 -4 6" dir="0.3 0.4 -1" directional="true" />
+    <light name="fill" pos="3 2 5" dir="-0.3 -0.2 -1" diffuse="0.4 0.4 0.4" />
+    <camera name="overview" pos="4 -6 4" xyaxes="0.83205 0.5547 0 -0.267 0.400 0.876" />
+    <geom friction="0.8 0.01 0.001" condim="3" name="floor" type="plane" size="4 4 0.05" material="ground" />
     <!-- COCO chair (56): full-size chairs facing the open center of the map. -->
-    <body name="chair_red" pos="-1.5 1 0" childclass="chair">
-      <geom name="red_seat" pos="0 0 0.47" size="0.24 0.24 0.035"/>
-      <geom name="red_back" pos="0 0.215 0.76" size="0.24 0.025 0.255"/>
-      <geom pos="-0.19 -0.19 0.22" size="0.025 0.025 0.22"/>
-      <geom pos="0.19 -0.19 0.22" size="0.025 0.025 0.22"/>
-      <geom pos="-0.19 0.19 0.22" size="0.025 0.025 0.22"/>
-      <geom pos="0.19 0.19 0.22" size="0.025 0.025 0.22"/>
+    <body name="chair_red" pos="-1.5 1 0">
+      <geom friction="0.8 0.01 0.001" condim="3" type="box" name="red_seat" pos="0 0 0.47" size="0.24 0.24 0.035" rgba="0 0 0 0" group="3" />
+      <geom friction="0.8 0.01 0.001" condim="3" type="box" name="red_back" pos="0 0.215 0.76" size="0.24 0.025 0.255" rgba="0 0 0 0" group="3" />
+      <geom friction="0.8 0.01 0.001" condim="3" type="box" pos="-0.19 -0.19 0.22" size="0.025 0.025 0.22" rgba="0 0 0 0" group="3" />
+      <geom friction="0.8 0.01 0.001" condim="3" type="box" pos="0.19 -0.19 0.22" size="0.025 0.025 0.22" rgba="0 0 0 0" group="3" />
+      <geom friction="0.8 0.01 0.001" condim="3" type="box" pos="-0.19 0.19 0.22" size="0.025 0.025 0.22" rgba="0 0 0 0" group="3" />
+      <geom friction="0.8 0.01 0.001" condim="3" type="box" pos="0.19 0.19 0.22" size="0.025 0.025 0.22" rgba="0 0 0 0" group="3" />
+      <geom name="chair_red_visual" type="mesh" mesh="chair_mesh" material="red" contype="0" conaffinity="0" group="2" euler="0 0 -90" />
     </body>
-    <body name="chair_blue" pos="-0.5 1 0" childclass="chair">
-      <geom name="blue_seat" pos="0 0 0.47" size="0.24 0.24 0.035" material="blue"/>
-      <geom name="blue_back" pos="0 0.215 0.76" size="0.24 0.025 0.255" material="blue"/>
-      <geom pos="-0.19 -0.19 0.22" size="0.025 0.025 0.22" material="blue"/>
-      <geom pos="0.19 -0.19 0.22" size="0.025 0.025 0.22" material="blue"/>
-      <geom pos="-0.19 0.19 0.22" size="0.025 0.025 0.22" material="blue"/>
-      <geom pos="0.19 0.19 0.22" size="0.025 0.025 0.22" material="blue"/>
+    <body name="chair_blue" pos="-0.5 1 0">
+      <geom friction="0.8 0.01 0.001" condim="3" type="box" name="blue_seat" pos="0 0 0.47" size="0.24 0.24 0.035" rgba="0 0 0 0" group="3" />
+      <geom friction="0.8 0.01 0.001" condim="3" type="box" name="blue_back" pos="0 0.215 0.76" size="0.24 0.025 0.255" rgba="0 0 0 0" group="3" />
+      <geom friction="0.8 0.01 0.001" condim="3" type="box" pos="-0.19 -0.19 0.22" size="0.025 0.025 0.22" rgba="0 0 0 0" group="3" />
+      <geom friction="0.8 0.01 0.001" condim="3" type="box" pos="0.19 -0.19 0.22" size="0.025 0.025 0.22" rgba="0 0 0 0" group="3" />
+      <geom friction="0.8 0.01 0.001" condim="3" type="box" pos="-0.19 0.19 0.22" size="0.025 0.025 0.22" rgba="0 0 0 0" group="3" />
+      <geom friction="0.8 0.01 0.001" condim="3" type="box" pos="0.19 0.19 0.22" size="0.025 0.025 0.22" rgba="0 0 0 0" group="3" />
+      <geom name="chair_blue_visual" type="mesh" mesh="chair_mesh" material="blue" contype="0" conaffinity="0" group="2" euler="0 0 -90" />
     </body>
-
-    <!-- COCO bench (13): wooden slats on a metal frame. -->
-    <body name="bench" pos="1.2 1.2 0" childclass="bench">
-      <geom pos="0 -0.19 0.46" size="0.85 0.055 0.025"/>
-      <geom pos="0 -0.06 0.46" size="0.85 0.055 0.025"/>
-      <geom pos="0 0.07 0.46" size="0.85 0.055 0.025"/>
-      <geom pos="0 0.20 0.46" size="0.85 0.055 0.025"/>
-      <geom pos="0 0.24 0.68" size="0.85 0.025 0.065"/>
-      <geom pos="0 0.24 0.84" size="0.85 0.025 0.065"/>
-      <geom pos="-0.65 -0.18 0.22" size="0.035 0.035 0.22" material="metal"/>
-      <geom pos="0.65 -0.18 0.22" size="0.035 0.035 0.22" material="metal"/>
-      <geom pos="-0.65 0.2 0.45" size="0.035 0.035 0.45" material="metal"/>
-      <geom pos="0.65 0.2 0.45" size="0.035 0.035 0.45" material="metal"/>
+    <!-- COCO bench (13): textured wooden seat on two supports. -->
+    <body name="bench" pos="1.2 1.2 0">
+      <geom name="bench_visual" type="mesh" mesh="bench_mesh" material="bench_surface" contype="0" conaffinity="0" group="2" />
+      <geom type="box" pos="0 0 0.465" size="1.302 0.297 0.035" rgba="0 0 0 0" group="3" friction="0.8 0.01 0.001" condim="3" />
+      <geom type="box" pos="-1.07 0 0.22" size="0.15 0.26 0.22" rgba="0 0 0 0" group="3" friction="0.8 0.01 0.001" condim="3" />
+      <geom type="box" pos="1.07 0 0.22" size="0.15 0.26 0.22" rgba="0 0 0 0" group="3" friction="0.8 0.01 0.001" condim="3" />
     </body>
-
-    <!-- COCO bottle (39): green bottle with rounded shoulder, neck and cap. -->
+    <!-- COCO bottle (39): historical bottle with chain (photogrammetry). -->
     <body name="bottle" pos="-1 -0.8 0">
-      <geom type="cylinder" pos="0 0 0.105" size="0.055 0.105" material="green"/>
-      <geom type="ellipsoid" pos="0 0 0.21" size="0.055 0.055 0.045" material="green"/>
-      <geom type="cylinder" pos="0 0 0.263" size="0.023 0.04" material="green"/>
-      <geom type="cylinder" pos="0 0 0.307" size="0.026 0.012" material="metal"/>
-      <geom type="cylinder" pos="0 0 0.12" size="0.056 0.035" rgba="0.95 0.92 0.8 1"/>
+      <geom name="bottle_visual" type="mesh" mesh="bottle_mesh" material="bottle_surface" contype="0" conaffinity="0" group="2" />
+      <geom type="ellipsoid" pos="0 0 0.16" size="0.1663 0.1319 0.16" rgba="0 0 0 0" group="3" friction="0.8 0.01 0.001" condim="3" />
     </body>
-
-    <!-- COCO cup (41): open ceramic mug, with a segmented wall and handle. -->
+    <!-- COCO cup (41): coffee cup with saucer and spoon. -->
     <body name="cup" pos="0.6 -0.8 0">
-      <geom type="cylinder" pos="0 0 0.008" size="0.065 0.008" material="ceramic"/>
-      <geom class="cup_wall" fromto="0.055 0 0.02 0.055 0 0.12"/>
-      <geom class="cup_wall" fromto="0.04763 0.0275 0.02 0.04763 0.0275 0.12"/>
-      <geom class="cup_wall" fromto="0.0275 0.04763 0.02 0.0275 0.04763 0.12"/>
-      <geom class="cup_wall" fromto="0 0.055 0.02 0 0.055 0.12"/>
-      <geom class="cup_wall" fromto="-0.0275 0.04763 0.02 -0.0275 0.04763 0.12"/>
-      <geom class="cup_wall" fromto="-0.04763 0.0275 0.02 -0.04763 0.0275 0.12"/>
-      <geom class="cup_wall" fromto="-0.055 0 0.02 -0.055 0 0.12"/>
-      <geom class="cup_wall" fromto="-0.04763 -0.0275 0.02 -0.04763 -0.0275 0.12"/>
-      <geom class="cup_wall" fromto="-0.0275 -0.04763 0.02 -0.0275 -0.04763 0.12"/>
-      <geom class="cup_wall" fromto="0 -0.055 0.02 0 -0.055 0.12"/>
-      <geom class="cup_wall" fromto="0.0275 -0.04763 0.02 0.0275 -0.04763 0.12"/>
-      <geom class="cup_wall" fromto="0.04763 -0.0275 0.02 0.04763 -0.0275 0.12"/>
-      <geom class="cup_wall" fromto="0.06 0 0.105 0.105 0 0.105"/>
-      <geom class="cup_wall" fromto="0.105 0 0.105 0.105 0 0.04"/>
-      <geom class="cup_wall" fromto="0.105 0 0.04 0.06 0 0.04"/>
+      <geom friction="0.8 0.01 0.001" condim="3" type="cylinder" pos="0 0 0.008" size="0.065 0.008" rgba="0 0 0 0" group="3" />
+      <geom friction="0.8 0.01 0.001" condim="3" type="capsule" size="0.012" fromto="0.055 0 0.02 0.055 0 0.12" rgba="0 0 0 0" group="3" />
+      <geom friction="0.8 0.01 0.001" condim="3" type="capsule" size="0.012" fromto="0.04763 0.0275 0.02 0.04763 0.0275 0.12" rgba="0 0 0 0" group="3" />
+      <geom friction="0.8 0.01 0.001" condim="3" type="capsule" size="0.012" fromto="0.0275 0.04763 0.02 0.0275 0.04763 0.12" rgba="0 0 0 0" group="3" />
+      <geom friction="0.8 0.01 0.001" condim="3" type="capsule" size="0.012" fromto="0 0.055 0.02 0 0.055 0.12" rgba="0 0 0 0" group="3" />
+      <geom friction="0.8 0.01 0.001" condim="3" type="capsule" size="0.012" fromto="-0.0275 0.04763 0.02 -0.0275 0.04763 0.12" rgba="0 0 0 0" group="3" />
+      <geom friction="0.8 0.01 0.001" condim="3" type="capsule" size="0.012" fromto="-0.04763 0.0275 0.02 -0.04763 0.0275 0.12" rgba="0 0 0 0" group="3" />
+      <geom friction="0.8 0.01 0.001" condim="3" type="capsule" size="0.012" fromto="-0.055 0 0.02 -0.055 0 0.12" rgba="0 0 0 0" group="3" />
+      <geom friction="0.8 0.01 0.001" condim="3" type="capsule" size="0.012" fromto="-0.04763 -0.0275 0.02 -0.04763 -0.0275 0.12" rgba="0 0 0 0" group="3" />
+      <geom friction="0.8 0.01 0.001" condim="3" type="capsule" size="0.012" fromto="-0.0275 -0.04763 0.02 -0.0275 -0.04763 0.12" rgba="0 0 0 0" group="3" />
+      <geom friction="0.8 0.01 0.001" condim="3" type="capsule" size="0.012" fromto="0 -0.055 0.02 0 -0.055 0.12" rgba="0 0 0 0" group="3" />
+      <geom friction="0.8 0.01 0.001" condim="3" type="capsule" size="0.012" fromto="0.0275 -0.04763 0.02 0.0275 -0.04763 0.12" rgba="0 0 0 0" group="3" />
+      <geom friction="0.8 0.01 0.001" condim="3" type="capsule" size="0.012" fromto="0.04763 -0.0275 0.02 0.04763 -0.0275 0.12" rgba="0 0 0 0" group="3" />
+      <geom friction="0.8 0.01 0.001" condim="3" type="capsule" size="0.012" fromto="0.06 0 0.105 0.105 0 0.105" rgba="0 0 0 0" group="3" />
+      <geom friction="0.8 0.01 0.001" condim="3" type="capsule" size="0.012" fromto="0.105 0 0.105 0.105 0 0.04" rgba="0 0 0 0" group="3" />
+      <geom friction="0.8 0.01 0.001" condim="3" type="capsule" size="0.012" fromto="0.105 0 0.04 0.06 0 0.04" rgba="0 0 0 0" group="3" />
+      <geom name="cup_visual" type="mesh" mesh="cup_mesh" material="ceramic" contype="0" conaffinity="0" group="2" />
     </body>
   </worldbody>
 </mujoco>

@@ -25,6 +25,7 @@ RUNTIME_CONTROL_DIR = DEMO_DIR.parent
 PACKAGE_SRC = RUNTIME_CONTROL_DIR / "src"
 try:
     from runtime_control import (
+        MapSpec,
         MotorCommandDelay,
         RuntimeScene,
         bundled_map_specs,
@@ -40,6 +41,7 @@ except ModuleNotFoundError as exc:
         raise
     sys.path.insert(0, str(PACKAGE_SRC))
     from runtime_control import (
+        MapSpec,
         MotorCommandDelay,
         RuntimeScene,
         bundled_map_specs,
@@ -56,6 +58,9 @@ DEFAULT_CONFIG = DEMO_DIR / "dog.yaml"
 DEFAULT_ONNX = DEMO_DIR / "model_3400.onnx"
 DEFAULT_ROBOT_XML = DEMO_DIR / "dog" / "xml" / "dog_terrain.xml"
 MAP_SPECS = bundled_map_specs()
+MAP_SPECS["coco_scene"] = MapSpec(
+    DEMO_DIR / "map" / "coco_scene.xml", minimum_box_half_thickness=0
+)
 
 # compose_scene injects these under "trunk"; they move and rotate with the robot.
 ROBOT_CAMERAS = make_standard_robot_cameras(prefix="dog")
@@ -344,7 +349,11 @@ def build_runtime_config(args, kps, kds):
         "suspended_steps": "Suspended Steps",
         "perlin_rough": "Perlin Rough Terrain",
         "dynamic_obstacles": "Dynamic Obstacles",
+        "coco_scene": "COCO Objects",
     }
+    # The first map label determines the runtime's initial active map.
+    initial_map = args.map
+    map_labels = {initial_map: map_labels[initial_map], **map_labels}
     return make_runtime_config(
         gui=args.gui,
         title="Dog MuJoCo Live Tuning",
@@ -353,8 +362,8 @@ def build_runtime_config(args, kps, kds):
         kp=kps[0],
         kd=kds[0],
         torque_limit=TAU_LIMIT_CALF,
-        initial_position=map_spawns["rc26_track"]["position"],
-        initial_quaternion=map_spawns["rc26_track"]["quaternion"],
+        initial_position=map_spawns[initial_map]["position"],
+        initial_quaternion=map_spawns[initial_map]["quaternion"],
         command=(1.0, 1.0, 1.0, 0.25),
         height_range=(0.2, 0.35),
         cameras=CAMERA_OPTIONS,
@@ -382,9 +391,18 @@ def build_runtime_config(args, kps, kds):
     )
 
 
-if __name__ == "__main__":
+def main():
+    """Parse launch options and run the robot simulation."""
+    global height_cmd, reset_flag, print_action_flag, runtime, runtime_config
+
     import argparse
     parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--map",
+        choices=tuple(MAP_SPECS),
+        default="rc26_track",
+        help="map to load at startup (use coco_scene for the COCO object map)",
+    )
 
     parser.add_argument(
         "--onnx",
@@ -703,3 +721,7 @@ if __name__ == "__main__":
 
     scene.close()
     print("\n[INFO] simulation finished")
+
+
+if __name__ == "__main__":
+    main()
