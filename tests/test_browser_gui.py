@@ -129,6 +129,16 @@ class BrowserTests(unittest.TestCase):
             self.assertEqual(response.status, 200)
         self.assertTrue(self.state.stop_requested.is_set())
 
+    def test_end_simulation_clears_active_action_and_stops_streams(self):
+        self.state.set_active_action(2)
+        with self.request("/api/end", {}) as response:
+            self.assertEqual(response.status, 200)
+            self.assertEqual(json.load(response), {"ok": True})
+        with self.request("/api/state") as response:
+            snapshot = json.load(response)
+        self.assertFalse(snapshot["running"])
+        self.assertIsNone(snapshot["active_action"])
+
     def test_logs_are_bounded(self):
         for i in range(2500):
             self.state.append_log(str(i))

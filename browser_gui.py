@@ -188,6 +188,9 @@ class BrowserGUI:
                     if self.path == "/api/chat":
                         request_id = gui.dialogue.submit_prompt(payload.get("prompt"))
                         self._response(202, {"id": request_id})
+                    elif self.path == "/api/end":
+                        self._response(200, {"ok": True})
+                        gui.state.close()
                     elif self.path == "/api/stop":
                         gui.state.stop_requested.set()
                         self._response(200, {"ok": True})
