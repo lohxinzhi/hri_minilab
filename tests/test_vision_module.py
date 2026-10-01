@@ -80,8 +80,8 @@ class GetBboxTests(unittest.TestCase):
 
 
 class FpvStreamTests(unittest.TestCase):
-    def test_all_boxes_are_drawn_but_only_map_classes_are_labeled(self):
-        labels = ["chair", "bench", "bottle", "cup", "person", "dining table"]
+    def test_all_boxes_are_labeled_with_selected_and_other_class_colors(self):
+        labels = ["chair", "bench", "car", "bicycle", "bottle", "cup"]
         detections = [
             {"bbox": [5, 10, 30, 40], "label": label, "confidence": 0.8}
             for label in labels
@@ -112,7 +112,11 @@ class FpvStreamTests(unittest.TestCase):
             )
             self.assertEqual(
                 [call.args[1] for call in text.call_args_list],
-                [label + " 0.80" for label in labels[:4]],
+                [label + " 0.80" for label in labels],
+            )
+            self.assertEqual(
+                [call.args[5] for call in text.call_args_list],
+                [(0, 255, 0)] * 4 + [(64, 64, 64)] * 2,
             )
 
     def test_camera_renderer_reuse_and_rgb_conversion(self):

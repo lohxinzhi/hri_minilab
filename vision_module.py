@@ -9,7 +9,7 @@ from ultralytics import YOLO
 class VisionModule:
     """Detect objects with a pretrained model reused across frames."""
 
-    COCO_SCENE_CLASSES = frozenset({"chair", "bench", "bottle", "cup"})
+    COCO_SCENE_CLASSES = frozenset({"chair", "bench", "car", "bicycle"})
 
     def __init__(self, model: str = "yolov8n.pt") -> None:
         """Accept a pretrained model name or a path to custom model weights."""
@@ -35,8 +35,8 @@ class VisionModule:
 
         Call repeatedly from the simulation loop on the main thread. Returns
         False when Q, Escape, or the window close button is pressed; the caller
-        can stop streaming while continuing simulation. Labels the chair,
-        bench, bottle, and cup classes; other detections get grey boxes only.
+        can stop streaming while continuing simulation. Labels all detections;
+        selected classes get green boxes and labels, and others get grey ones.
         """
         if self._renderer is None:
             self._renderer = mujoco.Renderer(mj_model, height=480, width=640)
@@ -52,8 +52,6 @@ class VisionModule:
             x_min, y_min, x_max, y_max = map(int, detection["bbox"])
             color = (0, 255, 0) if selected else (64, 64, 64)
             cv2.rectangle(frame, (x_min, y_min), (x_max, y_max), color, 2)
-            if not selected:
-                continue
             label = f"{detection['label']} {detection['confidence']:.2f}"
             cv2.putText(
                 frame,

@@ -66,5 +66,273 @@
         0.31999999999999984
       ]
     ]
+  },
+  "car": {
+    "faces": 2032,
+    "scaling": "per-axis to dimensions_m after rotation",
+    "dimensions_m": [
+      4.5,
+      1.85,
+      1.5
+    ],
+    "rotation": "90 degrees about X; car additionally 90 degrees about Z",
+    "bounds_m": [
+      [
+        -2.25,
+        -0.925,
+        0
+      ],
+      [
+        2.25,
+        0.925,
+        1.5
+      ]
+    ]
+  },
+  "bicycle": {
+    "faces": 16166,
+    "scaling": "per-axis to dimensions_m after rotation",
+    "dimensions_m": [
+      1.85,
+      0.68,
+      1.18
+    ],
+    "rotation": "90 degrees about X; car additionally 90 degrees about Z",
+    "bounds_m": [
+      [
+        -0.925,
+        -0.34,
+        0
+      ],
+      [
+        0.925,
+        0.34,
+        1.18
+      ]
+    ]
+  },
+  "suv": {
+    "faces": 2474,
+    "scaling": "per-axis to dimensions_m after rotation",
+    "dimensions_m": [
+      4.6,
+      1.95,
+      1.8
+    ],
+    "rotation": "90 degrees about X and 90 degrees about Z",
+    "bounds_m": [
+      [
+        -2.3,
+        -0.9750000000000001,
+        0.0
+      ],
+      [
+        2.3,
+        0.9750000000000001,
+        1.8000000000000003
+      ]
+    ]
+  },
+  "lamborghini_centenario": {
+    "source_glb": "lamborghini_centenario.glb",
+    "uniform_scale": 1.0050921434697762,
+    "dimensions_m": [
+      4.9239999999999995,
+      2.2710621096553183,
+      1.1377321546037187
+    ],
+    "rotation": "90 degrees about X and 90 degrees about Z",
+    "translation_m": [
+      -0.1387952507291561,
+      -0.0,
+      0.0020795434703287496
+    ],
+    "parts": [
+      {
+        "mesh": "lamborghini_centenario/lamborghini_centenario_00.obj",
+        "source_material": "Material.001",
+        "source_faces": 19559,
+        "faces": 19559
+      },
+      {
+        "mesh": "lamborghini_centenario/lamborghini_centenario_01.obj",
+        "source_material": "Material.007",
+        "source_faces": 696,
+        "faces": 696
+      },
+      {
+        "mesh": "lamborghini_centenario/lamborghini_centenario_02.obj",
+        "source_material": "glasses_Glas_light__0",
+        "source_faces": 511,
+        "faces": 511
+      },
+      {
+        "mesh": "lamborghini_centenario/lamborghini_centenario_03.obj",
+        "source_material": "Material.002",
+        "source_faces": 7646,
+        "faces": 7646
+      },
+      {
+        "mesh": "lamborghini_centenario/lamborghini_centenario_04.obj",
+        "source_material": "Material.017",
+        "source_faces": 1543,
+        "faces": 1543
+      },
+      {
+        "mesh": "lamborghini_centenario/lamborghini_centenario_05.obj",
+        "source_material": "Material.004",
+        "source_faces": 30,
+        "faces": 30
+      },
+      {
+        "mesh": "lamborghini_centenario/lamborghini_centenario_06.obj",
+        "source_material": "Material.003",
+        "source_faces": 32,
+        "faces": 32
+      },
+      {
+        "mesh": "lamborghini_centenario/lamborghini_centenario_07.obj",
+        "source_material": "Material.018",
+        "source_faces": 821,
+        "faces": 821
+      },
+      {
+        "mesh": "lamborghini_centenario/lamborghini_centenario_08.obj",
+        "source_material": "Material.011",
+        "source_faces": 920,
+        "faces": 920
+      }
+    ]
+  },
+  "toyota_supra": {
+    "source_glb": "toyota_supra.glb",
+    "uniform_scale": 1.0023992132664215,
+    "dimensions_m": [
+      4.380000000000001,
+      1.998574939608182,
+      1.2594777525217087
+    ],
+    "rotation": "90 degrees about X and 90 degrees about Z",
+    "translation_m": [
+      -0.14351997096681468,
+      -5.424925228481037e-07,
+      0.0012893960286706916
+    ],
+    "parts": [
+      {
+        "mesh": "toyota_supra/toyota_supra_00.obj",
+        "source_material": "carpaint",
+        "source_faces": 146360,
+        "faces": 19709
+      },
+      {
+        "mesh": "toyota_supra/toyota_supra_01.obj",
+        "source_material": "light",
+        "source_faces": 7392,
+        "faces": 7392
+      },
+      {
+        "mesh": "toyota_supra/toyota_supra_02.obj",
+        "source_material": "mirror",
+        "source_faces": 2464,
+        "faces": 2464
+      },
+      {
+        "mesh": "toyota_supra/toyota_supra_03.obj",
+        "source_material": "blackleather",
+        "source_faces": 206516,
+        "faces": 24616
+      },
+      {
+        "mesh": "toyota_supra/toyota_supra_04.obj",
+        "source_material": "red_reflec",
+        "source_faces": 13088,
+        "faces": 12000
+      },
+      {
+        "mesh": "toyota_supra/toyota_supra_05.obj",
+        "source_material": "GlossBlackpaint",
+        "source_faces": 461075,
+        "faces": 55717
+      },
+      {
+        "mesh": "toyota_supra/toyota_supra_06.obj",
+        "source_material": "blackplate_metal",
+        "source_faces": 3929,
+        "faces": 3929
+      },
+      {
+        "mesh": "toyota_supra/toyota_supra_07.obj",
+        "source_material": "lambert1",
+        "source_faces": 27571,
+        "faces": 12000
+      },
+      {
+        "mesh": "toyota_supra/toyota_supra_08.obj",
+        "source_material": "metal",
+        "source_faces": 141418,
+        "faces": 12838
+      },
+      {
+        "mesh": "toyota_supra/toyota_supra_09.obj",
+        "source_material": "tire",
+        "source_faces": 191992,
+        "faces": 25118
+      },
+      {
+        "mesh": "toyota_supra/toyota_supra_10.obj",
+        "source_material": "balck_tint_glass",
+        "source_faces": 56702,
+        "faces": 13682
+      },
+      {
+        "mesh": "toyota_supra/toyota_supra_11.obj",
+        "source_material": "orange_light",
+        "source_faces": 6744,
+        "faces": 6744
+      },
+      {
+        "mesh": "toyota_supra/toyota_supra_12.obj",
+        "source_material": "carbon",
+        "source_faces": 13077,
+        "faces": 12000
+      },
+      {
+        "mesh": "toyota_supra/toyota_supra_13.obj",
+        "source_material": "carplate",
+        "source_faces": 55,
+        "faces": 55
+      },
+      {
+        "mesh": "toyota_supra/toyota_supra_14.obj",
+        "source_material": "brake",
+        "source_faces": 6414,
+        "faces": 6414
+      },
+      {
+        "mesh": "toyota_supra/toyota_supra_15.obj",
+        "source_material": "seat",
+        "source_faces": 87568,
+        "faces": 12000
+      },
+      {
+        "mesh": "toyota_supra/toyota_supra_16.obj",
+        "source_material": "taillights",
+        "source_faces": 16046,
+        "faces": 12000
+      },
+      {
+        "mesh": "toyota_supra/toyota_supra_17.obj",
+        "source_material": "screen",
+        "source_faces": 1768,
+        "faces": 1768
+      },
+      {
+        "mesh": "toyota_supra/toyota_supra_18.obj",
+        "source_material": "button",
+        "source_faces": 53483,
+        "faces": 12000
+      }
+    ]
   }
 }
