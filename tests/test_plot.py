@@ -12,6 +12,27 @@ import plot
 
 
 class HeadingPlotTests(unittest.TestCase):
+    def test_angular_velocity_uses_separate_axis_in_same_image(self):
+        fig, (heading_ax, angular_ax) = plot.plt.subplots(nrows=2, sharex=True)
+        with (
+            tempfile.TemporaryDirectory() as folder,
+            patch.object(
+                plot.plt, "subplots", return_value=(fig, (heading_ax, angular_ax))
+            ),
+        ):
+            path = plot.plot_heading(
+                [0, 1, 2],
+                [0, 90, 180],
+                output_path=Path(folder) / "heading_and_velocity.png",
+                angular_velocities=[-240, 0, 240],
+            )
+            self.assertTrue(path.is_file())
+        self.assertEqual(len(fig.axes), 2)
+        np.testing.assert_array_equal(angular_ax.lines[0].get_xdata(), [0, 1, 2])
+        np.testing.assert_array_equal(angular_ax.lines[0].get_ydata(), [-240, 0, 240])
+        self.assertEqual(angular_ax.get_ylabel(), "Angular velocity (degrees/second)")
+        self.assertTrue(angular_ax.get_shared_x_axes().joined(heading_ax, angular_ax))
+
     def test_default_filename_has_timestamp_and_does_not_overwrite(self):
         with (
             tempfile.TemporaryDirectory() as folder,
@@ -74,6 +95,8 @@ class HeadingPlotTests(unittest.TestCase):
             plot.plot_heading([0, 1], [60])
         with self.assertRaises(ValueError):
             plot.plot_heading([0, 1], [60, 90], [90])
+        with self.assertRaises(ValueError):
+            plot.plot_heading([0, 1], [60, 90], angular_velocities=[1])
 
 
 if __name__ == "__main__":

@@ -30,6 +30,9 @@ class PlayMapTests(unittest.TestCase):
         times, headings, commands = save_plot.call_args.args
         self.assertEqual(len(times), len(headings))
         self.assertEqual(len(times), len(commands))
+        self.assertEqual(
+            len(times), len(save_plot.call_args.kwargs["angular_velocities"])
+        )
 
     def test_yaw_shortcuts_and_quaternion_heading(self):
         config = self.make_config("coco_scene")
@@ -69,6 +72,7 @@ class PlayMapTests(unittest.TestCase):
 
     def test_held_keyboard_submits_only_one_timed_command(self):
         with (
+            patch.object(play, "KEYBOARD_MOVE_DURATION", 2.5),
             patch.object(play, "_pressed_keys", {"w"}),
             patch.object(play, "move", wraps=play.move) as command,
             patch.object(
@@ -90,6 +94,16 @@ class PlayMapTests(unittest.TestCase):
         movements = [call for call in command.call_args_list if call.args == (1, 0, 0)]
         self.assertGreater(len(movements), 1)
         self.assertEqual(sum(call.kwargs["new_command"] for call in movements), 1)
+        self.assertTrue(all(call.kwargs["duration"] == 2.5 for call in movements))
+
+    def test_browser_move_uses_keyboard_duration(self):
+        with (
+            patch.object(play, "KEYBOARD_MOVE_DURATION", 2.5),
+            patch.object(play, "move", wraps=play.move) as command,
+        ):
+            play.apply_motion_events([("velocity", (1, 0, 0))], None, np.zeros(3), 0)
+        command.assert_called_once_with(1, 0, 0, duration=2.5, new_command=True)
+        play.move(0, 0, 0, duration=0, new_command=True)
 
     def test_invalid_low_rates_are_rejected_before_scene_creation(self):
         for rate in ("0", "-1", "nan", "inf"):

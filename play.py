@@ -72,6 +72,7 @@ MAP_SPECS["coco_scene"] = MapSpec(
 ROBOT_CAMERAS = make_standard_robot_cameras(prefix="dog")
 CAMERA_OPTIONS = standard_camera_options(prefix="dog")
 DEFAULT_LOW_HZ = 20.0
+KEYBOARD_MOVE_DURATION = 1  # Seconds per new keyboard movement command.
 
 
 # ============================================================
@@ -333,7 +334,7 @@ def apply_motion_events(events, turn_angle, command, current_heading):
             turn_angle = value
         elif kind == "velocity":
             turn_angle = None
-            command = move(*value, new_command=True)
+            command = move(*value, duration=KEYBOARD_MOVE_DURATION, new_command=True)
         else:
             turn_angle = None
             command = move(0, 0, 0, duration=0, new_command=True)
@@ -629,7 +630,7 @@ def main():
           f" T:reset Y:print model output")
     print(f"  R:crouch↓ F:stand↑ Z:reset height (default 0.25m)")
     print("  Browser only: 1–9 request relative turns of +10–90 degrees")
-    print(f"  [press for a 1-second move; X stops immediately] global evdev listener,"
+    print(f"  [press for a {KEYBOARD_MOVE_DURATION:g}-second move; X stops immediately] global evdev listener,"
           f" works on Wayland/X11\n")
 
     display = scene.viewer(
@@ -646,9 +647,13 @@ def main():
     heading_times = [0.0]
     heading_history = [previous_heading]
     heading_commands = [None]
+    angular_velocity_history = [0.0]
 
     def save_heading_plot():
-        path = plot_heading(heading_times, heading_history, heading_commands)
+        path = plot_heading(
+            heading_times, heading_history, heading_commands,
+            angular_velocities=angular_velocity_history,
+        )
         print(f"[PLOT] saved {path}")
 
     with ExitStack() as cleanup, display as viewer, vision:
@@ -710,7 +715,11 @@ def main():
             else:
                 if new_command:
                     turn_angle_deg = None
-                cmd = move(*velocity_request, new_command=new_command)
+                cmd = move(
+                    *velocity_request,
+                    duration=KEYBOARD_MOVE_DURATION,
+                    new_command=new_command,
+                )
             previous_velocity_request = velocity_request
 
             if runtime.panel is not None:
@@ -844,7 +853,11 @@ def main():
             runtime.apply_external_forces(mj_model, mj_data)
             mujoco.mj_step(mj_model, mj_data)
             heading_times.append(time.monotonic() - heading_start)
-            heading_history.append(heading_deg(mj_data.qpos[3:7]))
+            measured_heading = heading_deg(mj_data.qpos[3:7])
+            heading_history.append(measured_heading)
+            # Differentiate world heading over a physics step, handling angle wrap.
+            yaw_change = (measured_heading - previous_heading + 180.0) % 360.0 - 180.0
+            angular_velocity_history.append(yaw_change / simulation_dt)
             heading_commands.append(get_turn_target_heading())
             count += 1
 
