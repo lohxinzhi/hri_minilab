@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import numpy as np
 
 GOTO_TIMEOUT_SECONDS = 60.0  # Shared wall-clock limit for search and approach.
-APPROACH_DISTANCE_METERS = 0.8
+APPROACH_DISTANCE_METERS = 1.0
 
 _velocity = np.zeros(3, dtype=np.float32)
 _deadline = 0.0
@@ -205,7 +205,7 @@ def approach(
     Horizontal error is box-center x / frame width minus 0.5. Positive
     image error requires a clockwise (negative wz) turn. Forward speed is
     0.5 m/s when abs(error) < 0.25; yaw rate is -2 * error rad/s.
-    Stop when the world-frame 2D distance is strictly below 0.8 m. A missing box stops
+    Stop when the world-frame 2D distance is strictly below 1.0 m. A missing box stops
     movement; goto_object handles the transition back to search.
     """
     box = _normalized_bbox(bbox, frame_size)

@@ -72,10 +72,10 @@ class GotoObjectTests(unittest.TestCase):
         self.goto([40, 0, 60, 99])
         self.assertEqual(motion_api.get_goto_status(), "RUNNING")
         np.testing.assert_array_equal(
-            self.goto([40, 10, 60, 30], robot_position=(0.8, 0)), [0.5, 0, 0]
+            self.goto([40, 10, 60, 30], robot_position=(1.0, 0)), [0.5, 0, 0]
         )
         np.testing.assert_array_equal(
-            self.goto([40, 10, 60, 30], robot_position=(0.79, 0)), [0, 0, 0]
+            self.goto([40, 10, 60, 30], robot_position=(0.9, 0)), [0, 0, 0]
         )
         self.assertEqual(motion_api.get_goto_status(), "SUCCESS")
         np.testing.assert_array_equal(motion_api.move(0, 0, 0), [0, 0, 0])
