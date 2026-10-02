@@ -178,7 +178,7 @@ def update_turn_command(turn_angle, current_heading, **controller_options):
 class RobotActionSequence:
     """Execute ordered plans on the physics thread using only the motion API."""
 
-    def __init__(self):
+    def __init__(self, on_status=None):
         self.pending = deque()
         self.active = None
         self.active_index = None
@@ -186,8 +186,17 @@ class RobotActionSequence:
         self.turn_angle = None
         self._plan_running = False
         self.goto_target = None
+        self.on_status = on_status
+        self.request_id = None
+        self._execution_started = False
 
-    def cancel(self):
+    def _report_status(self, status):
+        if self.on_status is not None and self.request_id is not None:
+            self.on_status(self.request_id, status)
+
+    def cancel(self, status="cancelled"):
+        if self._plan_running:
+            self._report_status(status)
         if self.active == "goto":
             cancel_goto_object()
         self.goto_target = None
@@ -197,17 +206,21 @@ class RobotActionSequence:
         self.active_index = None
         self.next_index = None
         self.turn_angle = None
+        self.request_id = None
+        self._execution_started = False
         return move(0, 0, 0, duration=0, new_command=True)
 
-    def replace(self, actions, history_start=None):
+    def replace(self, actions, history_start=None, request_id=None):
         actions = validate_actions(actions)
         self.cancel()
         self.pending.extend(actions)
         self.next_index = history_start
         self._plan_running = True
+        self.request_id = request_id
 
     def _finish_plan(self):
         if self._plan_running:
+            self._report_status("completed")
             self._plan_running = False
             print("[DONE]")
 
@@ -242,7 +255,7 @@ class RobotActionSequence:
         )
         status = get_goto_status()
         if status == "FAIL":
-            return self.cancel()
+            return self.cancel(status="failed")
         if status == "SUCCESS":
             self.active = None
             self.active_index = None
@@ -259,6 +272,9 @@ class RobotActionSequence:
         frame_size=(640, 480),
     ):
         options = {"yaw_rate_deg_s": yaw_rate_deg_s, "dt": dt}
+        if self._plan_running and not self._execution_started:
+            self._execution_started = True
+            self._report_status("executing")
         if self.active == "goto":
             command = self._update_goto(
                 current_heading, detections, frame_size, options
@@ -627,7 +643,7 @@ def run_simulation(browser_state):
     print(f"[INFO] warm-up done, norm={np.linalg.norm(obs_history.buffer):.4f}")
     display = scene.viewer(True)
     dialogue = DialogueManager()
-    sequence = RobotActionSequence()
+    sequence = RobotActionSequence(on_status=dialogue.update_task_status)
     vision = VisionModule(confidence_threshold=args.vision_confidence)
     gui = BrowserGUI(browser_state, dialogue, args.gui_port) if args.gui else None
     # Reuse the runtime's third-person tracking camera and existing robot FPV.
@@ -682,7 +698,10 @@ def run_simulation(browser_state):
             # Poll completed dialogue plans without waiting for console or API I/O.
             # If multiple replies arrived, the latest plan overrides previous work.
             while (actions := dialogue.poll_actions()) is not None:
-                sequence.replace(actions, dialogue.action_history_start(actions))
+                sequence.replace(
+                    actions, dialogue.action_history_start(actions),
+                    request_id=dialogue.action_request_id(actions),
+                )
                 print(f"[ACTIONS] {actions}")
             while (error := dialogue.poll_error()) is not None:
                 print(f"[DIALOGUE] {error}")

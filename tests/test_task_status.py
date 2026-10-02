@@ -1,0 +1,117 @@
+"""Link task execution outcomes to the originating chat prompt and reply."""
+
+import unittest
+from contextlib import redirect_stdout
+from io import StringIO
+from unittest.mock import Mock, patch
+
+import motion_api
+import play
+from dialogue_manager import DialogueManager
+
+
+class TaskStatusTests(unittest.TestCase):
+    def setUp(self):
+        clock = patch.object(motion_api.time, "monotonic", return_value=10.0)
+        self.now = clock.start()
+        self.addCleanup(clock.stop)
+        mission = patch.object(motion_api, "_object_mission", None)
+        mission.start()
+        self.addCleanup(mission.stop)
+        output = redirect_stdout(StringIO())
+        output.__enter__()
+        self.addCleanup(output.__exit__, None, None, None)
+        self.manager = DialogueManager(client=Mock())
+        self.sequence = play.RobotActionSequence(
+            on_status=self.manager.update_task_status
+        )
+        self.addCleanup(self.sequence.cancel)
+
+    def plan(self, actions):
+        request_id = self.manager.submit_prompt("request")
+        self.manager._reply(request_id, "plan", "planned", actions=actions)
+        offset = self.manager.action_history_start(actions)
+        self.assertEqual(self.manager.action_request_id(actions), request_id)
+        self.assertIsNone(self.manager.action_request_id(actions))
+        self.sequence.replace(actions, offset, request_id=request_id)
+        return request_id
+
+    def statuses(self, request_id):
+        return [
+            item["status"]
+            for item in self.manager.chat_snapshot()
+            if item["id"] == request_id
+        ]
+
+    def test_complete_only_after_all_moves_and_turns_finish(self):
+        request = self.plan(
+            [
+                {
+                    "action": "move",
+                    "velocity": {"vx": 0.5, "vy": 0, "wz": 0},
+                    "duration": 2,
+                },
+                {"action": "turn", "angle": 90},
+            ]
+        )
+        self.assertEqual(self.statuses(request), ["planned", "planned"])
+        self.sequence.update(0, dt=0.02)
+        self.assertEqual(self.statuses(request), ["executing", "executing"])
+        self.now.return_value = 12
+        self.sequence.update(0, dt=0.02)
+        self.assertEqual(self.statuses(request), ["executing", "executing"])
+        self.sequence.update(88, dt=0.02)
+        self.assertEqual(self.statuses(request), ["completed", "completed"])
+        self.sequence.update(88, dt=0.02)
+        self.sequence.cancel()
+        self.assertEqual(self.statuses(request), ["completed", "completed"])
+
+    def test_goto_failure_updates_chat_and_discards_following_actions(self):
+        request = self.plan(
+            [
+                {"action": "goto", "object_type": "chair", "object_color": "red"},
+                {"action": "turn", "angle": 90},
+            ]
+        )
+        self.sequence.update(0)
+        self.now.return_value = 70
+        self.sequence.update(0)
+        self.assertEqual(self.statuses(request), ["failed", "failed"])
+        self.assertFalse(self.sequence.pending)
+        self.sequence.cancel()
+        self.assertEqual(self.statuses(request), ["failed", "failed"])
+
+    def test_replacement_updates_only_the_interrupted_prompt(self):
+        old = self.plan([{"action": "turn", "angle": 90}])
+        self.sequence.update(0)
+        new = self.plan([{"action": "stop"}])
+        queued = self.manager.submit_prompt("still generating")
+        self.assertEqual(self.statuses(old), ["cancelled", "cancelled"])
+        self.assertEqual(self.statuses(new), ["planned", "planned"])
+        self.sequence.update(0)
+        self.assertEqual(self.statuses(new), ["completed", "completed"])
+        self.assertEqual(self.statuses(queued), ["queued"])
+        self.assertEqual(self.statuses(old), ["cancelled", "cancelled"])
+
+    def test_cancel_before_execution_and_chat_only_completion(self):
+        cancelled = self.plan([{"action": "turn", "angle": 90}])
+        self.sequence.cancel()
+        self.assertEqual(self.statuses(cancelled), ["cancelled", "cancelled"])
+        replied = self.plan([{"action": "chat", "reply": "Hello"}])
+        self.sequence.update(0)
+        self.assertEqual(self.statuses(replied), ["completed", "completed"])
+
+    def test_status_updates_preserve_chat_content_and_export_plan(self):
+        request = self.plan([{"action": "stop"}])
+        before = self.manager.export_snapshot()
+        self.sequence.update(0)
+        self.assertEqual(before, self.manager.export_snapshot())
+        self.assertEqual(self.statuses(request), ["completed", "completed"])
+        self.manager.update_task_status(request, "executing")
+        self.assertEqual(self.statuses(request), ["completed", "completed"])
+        with self.assertRaises(ValueError):
+            self.manager.update_task_status(request, "unknown")
+
+
+if __name__ == "__main__":
+    unittest.main()

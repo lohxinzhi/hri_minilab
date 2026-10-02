@@ -269,6 +269,7 @@ class DialogueManager:
         self._chat = []
         self._generated_actions = []
         self._plan_offsets = {}
+        self._plan_request_ids = {}
         self._export_actions = {}
         self._export_costs = {}
         self._next_id = 1
@@ -327,12 +328,30 @@ class DialogueManager:
         with self._chat_lock:
             return deepcopy(self._generated_actions)
 
+    def action_request_id(self, actions):
+        """Consume the prompt ID associated with this exact queued plan."""
+        with self._chat_lock:
+            return self._plan_request_ids.pop(id(actions), None)
+
+    def update_task_status(self, request_id, status):
+        """Update both chat entries as the simulation executes a prompt's plan."""
+        if status not in {"executing", "completed", "failed", "cancelled"}:
+            raise ValueError("unsupported task status")
+        with self._chat_lock:
+            for message in self._chat:
+                if message["id"] == request_id and message["status"] in {
+                    "planned",
+                    "executing",
+                }:
+                    message["status"] = status
+
     def _reply(self, request_id, content, status, actions=None, estimated_cost=None):
         with self._chat_lock:
             self._export_costs[request_id] = estimated_cost
             if actions is not None:
                 self._export_actions[request_id] = deepcopy(actions)
                 self._plan_offsets[id(actions)] = len(self._generated_actions)
+                self._plan_request_ids[id(actions)] = request_id
                 self._generated_actions.extend(
                     deepcopy(
                         [

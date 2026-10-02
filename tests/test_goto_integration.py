@@ -223,6 +223,10 @@ class GotoLoopTests(unittest.TestCase):
             )
             self.assertIn("[MISSION] status=SUCCESS", output.getvalue())
             self.assertIn("[DONE]", output.getvalue())
+            self.assertEqual(
+                [message["status"] for message in manager.chat_snapshot()],
+                ["completed", "completed"],
+            )
         manager._thread.join(1)
 
 

@@ -59,6 +59,27 @@ class BrowserTests(unittest.TestCase):
             "".join(item["text"] for item in snapshot["logs"]), sink.getvalue()
         )
 
+    def test_task_status_is_returned_in_chat_history(self):
+        request_id = self.dialogue.submit_prompt("stop")
+        self.dialogue._reply(
+            request_id,
+            "Stop and cancel remaining actions.",
+            "planned",
+            actions=[{"action": "stop"}],
+        )
+        for status in ("executing", "completed"):
+            with self.subTest(status=status):
+                self.dialogue.update_task_status(request_id, status)
+                with self.request("/api/state") as response:
+                    messages = json.load(response)["messages"]
+                self.assertEqual(
+                    [item["status"] for item in messages], [status, status]
+                )
+                self.assertEqual(
+                    [item["id"] for item in messages], [request_id, request_id]
+                )
+                self.assertEqual(messages[0]["content"], "stop")
+
     def test_camera_mjpeg_contains_encoded_frame(self):
         frame = np.full((16, 24, 3), [10, 20, 200], dtype=np.uint8)
         self.state.publish_frame("fpv", frame)
