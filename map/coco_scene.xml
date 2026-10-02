@@ -8,8 +8,8 @@
     <headlight ambient="0.35 0.35 0.35" diffuse="0.6 0.6 0.6" />
   </visual>
   <asset>
-    <texture name="ground_checker" type="2d" builtin="checker" rgb1="0.72 0.74 0.76" rgb2="0.82 0.84 0.86" width="256" height="256" />
-    <material name="ground" texture="ground_checker" texrepeat="8 8" reflectance="0.05" />
+    <texture name="ground_birch" type="2d" file="birch_wood.png" />
+    <material name="ground" texture="ground_birch" texuniform="true" texrepeat="1 1" reflectance="0.05" />
     <material name="red" rgba="0.8 0.06 0.04 1" />
     <material name="blue" rgba="0.04 0.18 0.85 1" />
     <mesh name="chair_mesh" file="chair.obj" />
