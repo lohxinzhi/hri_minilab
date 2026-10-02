@@ -212,6 +212,11 @@ class GotoExecutionTests(unittest.TestCase):
 
 class GotoLoopTests(unittest.TestCase):
     def test_submitted_prompt_runs_goto_with_headless_vision(self):
+        for use_vlm in (False, True):
+            with self.subTest(use_vlm=use_vlm):
+                self._run_submitted_goto(use_vlm)
+
+    def _run_submitted_goto(self, use_vlm):
         client = Mock()
         client.chat.completions.create.return_value = SimpleNamespace(
             choices=[
@@ -249,19 +254,30 @@ class GotoLoopTests(unittest.TestCase):
                     "coco_scene",
                     "--duration",
                     "0.2",
+                    *(["--use-vlm"] if use_vlm else []),
                 ],
             ),
             redirect_stdout(StringIO()) as output,
         ):
             vision = constructor.return_value
             vision.detections = [detection(bbox=[40, 0, 60, 70])]
+            vision.approach_detections = [
+                detection(bbox=[35, 5, 65, 75], confidence=None)
+            ]
+            # Even if VLM is waiting, YOLO mode must ignore that state.
+            vision.detection_waiting = True
+            vision.detection_received = True
             vision.frame_size = (100, 100)
             play.main()
             vision.render_fpv.assert_called()
             controller.assert_called()
             self.assertEqual(
-                controller.call_args.args, ("chair", "red", [40, 0, 60, 70])
+                controller.call_args.args,
+                ("chair", "red", [35, 5, 65, 75] if use_vlm else [40, 0, 60, 70]),
             )
+            self.assertEqual(controller.call_args.kwargs["vision_pending"], use_vlm)
+            self.assertEqual(controller.call_args.kwargs["use_vlm"], use_vlm)
+            self.assertTrue(controller.call_args.kwargs["vision_received"])
             self.assertIn("[MISSION] status=SUCCESS", output.getvalue())
             self.assertIn("[DONE]", output.getvalue())
             self.assertEqual(

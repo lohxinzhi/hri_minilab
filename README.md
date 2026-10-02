@@ -192,6 +192,43 @@ python play.py --map coco_scene --gui --vision-model yolo11n.pt --vlm-model gpt-
 The dashboard header displays the planner LLM, VLM, and object detection model.
 You can also set `VisionModule(vlm_model="gpt-4o")` directly in Python.
 
+Goto search/approach uses YOLO bounding boxes by default. Add `--use-vlm`
+to use the configured `--vlm-model` instead:
+
+```bash
+python play.py --map coco_scene --gui --use-vlm --vlm-model gpt-4o
+```
+
+VLM detection uses `DETECTION_PROMPT` to locate the requested object and color
+in an unannotated FPV image. It runs on the visual worker with at most one
+bounding-box request in flight. A VLM goto remains stationary until its first
+valid detection response arrives: a matching target starts approach, and a
+not-found response starts search. This initial wait resets for each new mission;
+API failures do not count as a detection result. Search then keeps turning
+through one continuous 360-degree revolution while requests are pending. If the revolution completes
+before the last request, the robot waits for that response before reporting
+not found. During VLM approach, bounding boxes refresh in the background after
+0.25 seconds while the last valid box keeps steering. Forward speed is 0.2 m/s
+and yaw correction is `-0.8 * horizontal_error` rad/s, both 40% of the YOLO
+approach speeds. A completed observation that no longer matches the target
+returns the mission to search. Invalid responses or a box older than five
+seconds since receipt stop approach until a usable result arrives, without
+changing phase. The live distance check still stops the robot below 1.0 m.
+YOLO approach remains at 0.5 m/s with `-2 * horizontal_error` yaw correction.
+Invalid boxes and API failures retry without being treated as a target loss;
+the existing 60-second goto deadline still applies. Boxes are checked for finite, ordered coordinates
+within the image. Colors retain the existing HSV estimation. The VLM does not
+provide confidence scores; `--vision-confidence` applies only to YOLO. Normal FPV boxes and labels always
+use YOLO; VLM boxes are separate observations used only for goto search/approach.
+During a goto mission, the VLM box is drawn over the YOLO boxes in purple,
+labeled `VLM: <object>` without confidence. The dashboard shows the goto
+detector separately from the YOLO display model.
+Detection requests share the worker with describe/VQA.
+
+VLM localization is slower and less precise than a dedicated detector;
+[OpenAI documents limitations in precise spatial localization](https://developers.openai.com/api/docs/guides/images-vision#limitations).
+Live VLM bounding-box accuracy has not been validated in this project.
+
 The FPV feed labels all detected COCO classes with confidence strictly above
 50%. Use `--vision-confidence 0.65` to change the threshold (range 0 to 1), or
 pass `confidence_threshold=0.65` to `VisionModule` in Python. Labels include

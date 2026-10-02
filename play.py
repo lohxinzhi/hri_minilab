@@ -332,6 +332,9 @@ class RobotActionSequence:
         robot_position,
         *,
         new_command=False,
+        vision_pending=False,
+        use_vlm=False,
+        vision_received=True,
     ):
         target = self.goto_target
         candidates = [
@@ -359,7 +362,7 @@ class RobotActionSequence:
             if detection["label"] == target["object_type"]
             and detection["color"] in colors
         ]
-        detection = max(matches, key=lambda item: item["confidence"], default=None)
+        detection = max(matches, key=lambda item: item["confidence"] or 0.0, default=None)
         if self.goto_map_object is None and detection is not None:
             # Associate a visual class/color with YAML metadata. Coordinates
             # never select a visible target or contribute to steering.
@@ -378,6 +381,9 @@ class RobotActionSequence:
             object_position=(map_object["x"], map_object["y"]),
             frame_size=frame_size,
             new_command=new_command,
+            vision_pending=vision_pending,
+            use_vlm=use_vlm,
+            vision_received=vision_received,
             **options,
         )
         status = get_goto_status()
@@ -399,6 +405,9 @@ class RobotActionSequence:
         detections=(),
         frame_size=(640, 480),
         robot_position=(0.0, 0.0),
+        vision_pending=False,
+        use_vlm=False,
+        vision_received=True,
     ):
         self._poll_visual_plans()
         options = {"yaw_rate_deg_s": yaw_rate_deg_s, "dt": dt}
@@ -426,7 +435,14 @@ class RobotActionSequence:
             self._active_visual = None
         if self.active == "goto":
             command = self._update_goto(
-                current_heading, detections, frame_size, options, robot_position
+                current_heading,
+                detections,
+                frame_size,
+                options,
+                robot_position,
+                vision_pending=vision_pending,
+                use_vlm=use_vlm,
+                vision_received=vision_received,
             )
             if self.active == "goto" or not self._plan_running:
                 return command
@@ -513,6 +529,9 @@ class RobotActionSequence:
                     options,
                     robot_position,
                     new_command=True,
+                    vision_pending=vision_pending,
+                    use_vlm=use_vlm,
+                    vision_received=vision_received,
                 )
                 if self.active == "goto" or not self._plan_running:
                     return command
@@ -670,6 +689,11 @@ def run_simulation(browser_state):
     )
     parser.add_argument("--gui-port", type=int, default=8765, help="robot dashboard port")
     parser.add_argument(
+        "--use-vlm",
+        action="store_true",
+        help="use the VLM for goto bounding boxes instead of YOLO",
+    )
+    parser.add_argument(
         "--vision-model",
         default=DEFAULT_VISION_MODEL,
         help="YOLO model name or weights path (default: yolov8n.pt)",
@@ -825,10 +849,13 @@ def run_simulation(browser_state):
         model=args.vision_model,
         confidence_threshold=args.vision_confidence,
         vlm_model=args.vlm_model,
+        detection_mode="vlm" if args.use_vlm else "yolo",
     )
 
     browser_state.set_models(
-        vlm_model=args.vlm_model, vision_model=args.vision_model
+        vlm_model=args.vlm_model,
+        vision_model=args.vision_model,
+        detection_mode="vlm" if args.use_vlm else "yolo",
     )
 
     def describe_current_view(action, request_id):
@@ -912,6 +939,16 @@ def run_simulation(browser_state):
                 sequence.cancel()
                 print("[ACTION] Robot stopped from dashboard.")
 
+            detection_target = sequence.goto_target
+            if (
+                detection_target is None
+                and sequence.active is None
+                and sequence.pending
+                and sequence.pending[0]["action"] == "goto"
+            ):
+                detection_target = sequence.pending[0]
+            vision.set_detection_target(detection_target)
+
             # Refresh detections before control, including missions without a GUI.
             now = time.monotonic()
             if now >= next_low_rate_task:
@@ -928,9 +965,14 @@ def run_simulation(browser_state):
                 current_heading,
                 yaw_rate_deg_s=heading_change / simulation_dt,
                 dt=simulation_dt,
-                detections=vision.detections,
+                detections=(
+                    vision.approach_detections if args.use_vlm else vision.detections
+                ),
                 frame_size=vision.frame_size,
                 robot_position=mj_data.qpos[:2].copy(),
+                vision_pending=args.use_vlm and vision.detection_waiting,
+                use_vlm=args.use_vlm,
+                vision_received=not args.use_vlm or vision.detection_received,
             )
 
             browser_state.set_active_action(sequence.active_index)

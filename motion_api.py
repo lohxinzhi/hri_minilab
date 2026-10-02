@@ -7,6 +7,7 @@ import numpy as np
 
 GOTO_TIMEOUT_SECONDS = 60.0  # Shared wall-clock limit for search and approach.
 APPROACH_DISTANCE_METERS = 1.0
+VLM_APPROACH_SPEED_SCALE = 0.4
 
 _velocity = np.zeros(3, dtype=np.float32)
 _deadline = 0.0
@@ -199,6 +200,7 @@ def approach(
     object_position,
     frame_size=(640, 480),
     new_command: bool = False,
+    speed_scale: float = 1.0,
 ) -> np.ndarray:
     """Steer toward a visible target using its pixel box and (width, height).
 
@@ -207,7 +209,10 @@ def approach(
     0.5 m/s when abs(error) < 0.25; yaw rate is -2 * error rad/s.
     Stop when the world-frame 2D distance is strictly below 1.0 m. A missing box stops
     movement; goto_object handles the transition back to search.
+    speed_scale reduces forward and yaw speeds for slower VLM observations.
     """
+    if not np.isfinite(speed_scale) or not 0 < speed_scale <= 1:
+        raise ValueError("speed_scale must be finite and between 0 (exclusive) and 1")
     box = _normalized_bbox(bbox, frame_size)
     distance = _object_distance(robot_position, object_position)
     if new_command:
@@ -216,7 +221,7 @@ def approach(
         return move(0, 0, 0, duration=0, new_command=True)
     error = (box[0] + box[2]) / 2 - 0.5
     vx = 0.5 if abs(error) < 0.25 else 0.0
-    return move(vx, 0, -2.0 * error, new_command=True)
+    return move(vx * speed_scale, 0, -2.0 * error * speed_scale, new_command=True)
 
 
 def search(
@@ -283,6 +288,9 @@ def goto_object(
     new_command: bool = False,
     yaw_rate_deg_s: float = 0.0,
     dt: float | None = None,
+    vision_pending: bool = False,
+    use_vlm: bool = False,
+    vision_received: bool = True,
 ) -> np.ndarray:
     """Poll a nonblocking search/approach mission with a configurable timeout.
 
@@ -300,7 +308,11 @@ def goto_object(
     once to explicitly restart the same target. Terminal calls return zeros
     without repeating mission logs; get_goto_status() reports the outcome.
     GOTO_TIMEOUT_SECONDS sets the deadline when a mission starts; it is shared
-    across all approach/search transitions.
+    across all approach/search transitions. With vision_pending=True, keep
+    searching through the same revolution. A VLM approach uses reduced speeds
+    and the last valid box during a refresh; without a usable box it stops while
+    preserving its phase. Pending vision never means the target was lost.
+    VLM missions wait for vision_received before entering their first phase.
     """
     global _object_mission
     if not isinstance(object_type, str) or not object_type.strip():
@@ -333,6 +345,18 @@ def goto_object(
         return _finish_object_mission(
             "FAIL", f"{_object_mission.timeout:g}-second timeout"
         )
+    if use_vlm and _object_mission.phase is None and not vision_received:
+        # No initial observation yet: start neither a turn nor an approach.
+        return move(0, 0, 0, duration=0, new_command=True)
+    if vision_pending and distance >= APPROACH_DISTANCE_METERS:
+        if _object_mission.phase == "approach":
+            if not use_vlm or box is None:
+                # No usable observation: stop without restarting search.
+                return move(0, 0, 0, duration=0, new_command=True)
+        else:
+            # A previous frame's box cannot steer an ongoing search.
+            box = None
+            bbox = None
     phase = (
         "approach"
         if box is not None or distance < APPROACH_DISTANCE_METERS
@@ -349,6 +373,7 @@ def goto_object(
             object_position=object_position,
             frame_size=frame_size,
             new_command=entering,
+            speed_scale=VLM_APPROACH_SPEED_SCALE if use_vlm else 1.0,
         )
         if distance < APPROACH_DISTANCE_METERS:
             elapsed = now - (_object_mission.deadline - _object_mission.timeout)
@@ -364,6 +389,6 @@ def goto_object(
         yaw_rate_deg_s=yaw_rate_deg_s,
         dt=dt,
     )
-    if not np.any(command):
+    if not np.any(command) and not vision_pending:
         return _finish_object_mission("FAIL", "object not found after one revolution")
     return command

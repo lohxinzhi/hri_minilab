@@ -30,6 +30,7 @@ class BrowserState:
         self.active_action = None
         self.vlm_model = None
         self.vision_model = None
+        self.detection_mode = "yolo"
         self.stop_requested = threading.Event()
 
     def append_log(self, text):
@@ -52,10 +53,11 @@ class BrowserState:
         with self.condition:
             self.active_action = index
 
-    def set_models(self, *, vlm_model, vision_model):
+    def set_models(self, *, vlm_model, vision_model, detection_mode="yolo"):
         with self.condition:
             self.vlm_model = vlm_model
             self.vision_model = vision_model
+            self.detection_mode = detection_mode
 
     def snapshot(self):
         with self.condition:
@@ -65,6 +67,7 @@ class BrowserState:
                 "active_action": self.active_action,
                 "vlm_model": self.vlm_model,
                 "vision_model": self.vision_model,
+                "detection_mode": self.detection_mode,
             }
 
     def close(self):

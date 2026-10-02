@@ -117,14 +117,16 @@ class PlayMapTests(unittest.TestCase):
         )
 
     def test_vision_and_vlm_launch_arguments_reach_detector_and_dashboard(self):
-        for options, expected, expected_vlm in (
-            ([], "yolov8n.pt", "gpt-6-luna"),
-            (["--vision-model", "yolov8s.pt"], "yolov8s.pt", "gpt-6-luna"),
+        for options, expected, expected_vlm, expected_mode in (
+            ([], "yolov8n.pt", "gpt-6-luna", "yolo"),
+            (["--vision-model", "yolov8s.pt"], "yolov8s.pt", "gpt-6-luna", "yolo"),
             (
                 ["--vision-model", "/tmp/custom weights.pt", "--vlm-model", "gpt-4o"],
                 "/tmp/custom weights.pt",
                 "gpt-4o",
+                "yolo",
             ),
+            (["--use-vlm", "--vlm-model", "gpt-4o"], "yolov8n.pt", "gpt-4o", "vlm"),
         ):
             with (
                 self.subTest(model=expected),
@@ -149,9 +151,13 @@ class PlayMapTests(unittest.TestCase):
                 state = play.BrowserState()
                 play.run_simulation(state)
                 constructor.assert_called_once_with(
-                    model=expected, confidence_threshold=0.65, vlm_model=expected_vlm
+                    model=expected,
+                    confidence_threshold=0.65,
+                    vlm_model=expected_vlm,
+                    detection_mode=expected_mode,
                 )
                 self.assertEqual(state.snapshot()["vision_model"], expected)
+                self.assertEqual(state.snapshot()["detection_mode"], expected_mode)
                 self.assertEqual(state.snapshot()["vlm_model"], expected_vlm)
 
     def test_invalid_low_rates_are_rejected_before_scene_creation(self):

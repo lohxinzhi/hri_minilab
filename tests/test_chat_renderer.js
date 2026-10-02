@@ -54,9 +54,9 @@ console.log('Chat renderer status badge tests passed');
 
 // Exercise the actual state poll so all model labels reflect the server values.
 const pollSource = script.slice(script.indexOf('async function poll'), script.indexOf('async function post'));
-const modelElements = new Map(['llm-model', 'vlm-model', 'vision-model', 'connection'].map(id => [id, new Element()]));
+const modelElements = new Map(['llm-model', 'vlm-model', 'vision-model', 'detection-mode', 'goto-model', 'connection'].map(id => [id, new Element()]));
 let dashboardState = {
-  model: 'planner-model', vlm_model: 'gpt-4o', vision_model: 'yolo11n.pt',
+  model: 'planner-model', vlm_model: 'gpt-4o', vision_model: 'yolo11n.pt', detection_mode: 'yolo',
   messages: [], actions: [], active_action: null, logs: [], running: true
 };
 const pollContext = vm.createContext({
@@ -70,9 +70,12 @@ vm.runInContext('let polling=false,ended=false,logId=0;' + pollSource, pollConte
   assert.equal(modelElements.get('llm-model').textContent, 'planner-model');
   assert.equal(modelElements.get('vlm-model').textContent, 'gpt-4o');
   assert.equal(modelElements.get('vision-model').textContent, 'yolo11n.pt');
-  dashboardState = {...dashboardState, vlm_model: 'gpt-6-luna', vision_model: '/tmp/custom weights.pt'};
+  assert.equal(modelElements.get('detection-mode').textContent, 'YOLO');
+  dashboardState = {...dashboardState, vlm_model: 'gpt-6-luna', vision_model: 'yolo11n.pt', detection_mode: 'vlm'};
   await vm.runInContext('poll()', pollContext);
   assert.equal(modelElements.get('vlm-model').textContent, 'gpt-6-luna');
-  assert.equal(modelElements.get('vision-model').textContent, '/tmp/custom weights.pt');
+  assert.equal(modelElements.get('vision-model').textContent, 'yolo11n.pt');
+  assert.equal(modelElements.get('goto-model').textContent, 'gpt-6-luna');
+  assert.equal(modelElements.get('detection-mode').textContent, 'VLM');
   console.log('Dashboard model label tests passed');
 })().catch(error => { console.error(error); process.exitCode = 1; });

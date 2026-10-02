@@ -118,6 +118,153 @@ class GotoObjectTests(unittest.TestCase):
         self.assertEqual(self.output.getvalue().count("[MISSION]"), 1)
         self.assertIsNone(motion_api.get_turn_target_heading())
 
+    def test_pending_vlm_keeps_one_continuous_search_and_waits_for_final_result(self):
+        for heading in (179, -91, -1, 89):
+            self.assertGreater(self.goto(heading=heading, vision_pending=True)[2], 0)
+        np.testing.assert_array_equal(
+            self.goto(heading=179, vision_pending=True), [0, 0, 0]
+        )
+        self.assertEqual(motion_api.get_goto_status(), "RUNNING")
+        self.assertEqual(self.output.getvalue().count("[SEARCH]"), 1)
+        self.goto(heading=179, vision_pending=False)
+        self.assertEqual(motion_api.get_goto_status(), "FAIL")
+        self.assertEqual(self.output.getvalue().count("[SEARCH]"), 1)
+
+    def test_final_vlm_result_can_find_target_after_search_turn_completes(self):
+        for heading in (0, 90, 180, -90, 0):
+            self.goto(heading=heading, vision_pending=True)
+        self.assertEqual(motion_api.get_goto_status(), "RUNNING")
+        np.testing.assert_array_equal(
+            self.goto([40, 10, 60, 30], heading=0), [0.5, 0, 0]
+        )
+        self.assertEqual(motion_api.get_goto_status(), "RUNNING")
+        self.assertEqual(self.output.getvalue().count("[APPROACH]"), 1)
+
+    def test_pending_vlm_holds_approach_without_restarting_search(self):
+        self.goto([40, 10, 60, 30])
+        for heading in (10, 20, 30):
+            np.testing.assert_array_equal(
+                self.goto(heading=heading, vision_pending=True), [0, 0, 0]
+            )
+            self.assertEqual(motion_api._object_mission.phase, "approach")
+        self.assertNotIn("[SEARCH]", self.output.getvalue())
+        self.assertEqual(motion_api.get_goto_status(), "RUNNING")
+        self.goto([40, 10, 60, 30], heading=30)
+        self.assertEqual(self.output.getvalue().count("[APPROACH]"), 1)
+        self.assertGreater(self.goto(heading=45)[2], 0)
+        self.assertEqual(self.output.getvalue().count("[SEARCH]"), 1)
+        self.assertEqual(motion_api.get_turn_target_heading(), 405)
+
+    def test_vlm_waits_for_first_result_then_starts_approach(self):
+        for timestamp in (10, 11, 12):
+            self.now.return_value = timestamp
+            np.testing.assert_array_equal(
+                self.goto(use_vlm=True, vision_pending=True, vision_received=False),
+                [0, 0, 0],
+            )
+            self.assertIsNone(motion_api._object_mission.phase)
+            self.assertIsNone(motion_api.get_turn_target_heading())
+        self.assertNotIn("[SEARCH]", self.output.getvalue())
+        self.assertNotIn("[APPROACH]", self.output.getvalue())
+        np.testing.assert_allclose(
+            self.goto([40, 10, 60, 30], use_vlm=True, vision_received=True),
+            [0.2, 0, 0],
+        )
+        self.assertEqual(motion_api._object_mission.phase, "approach")
+
+    def test_vlm_first_not_found_starts_search_and_refresh_keeps_it_running(self):
+        self.goto(use_vlm=True, vision_pending=True, vision_received=False)
+        self.assertGreater(self.goto(use_vlm=True, vision_received=True)[2], 0)
+        self.assertEqual(motion_api._object_mission.phase, "search")
+        self.assertGreater(
+            self.goto(
+                heading=30, use_vlm=True, vision_pending=True, vision_received=False
+            )[2],
+            0,
+        )
+        self.assertEqual(self.output.getvalue().count("[SEARCH]"), 1)
+
+    def test_yolo_starts_search_without_vlm_result(self):
+        self.assertGreater(self.goto(vision_received=False)[2], 0)
+        self.assertEqual(motion_api._object_mission.phase, "search")
+
+    def test_vlm_initial_wait_retains_timeout_and_restarts_for_new_mission(self):
+        self.goto(use_vlm=True, vision_received=False, vision_pending=True)
+        self.now.return_value = 70
+        np.testing.assert_array_equal(
+            self.goto(use_vlm=True, vision_received=False, vision_pending=True),
+            [0, 0, 0],
+        )
+        self.assertEqual(motion_api.get_goto_status(), "FAIL")
+        self.now.return_value = 80
+        self.goto([40, 10, 60, 30], use_vlm=True, new_command=True)
+        np.testing.assert_array_equal(
+            self.goto(
+                use_vlm=True,
+                new_command=True,
+                vision_received=False,
+                vision_pending=True,
+            ),
+            [0, 0, 0],
+        )
+        self.assertIsNone(motion_api._object_mission.phase)
+
+    def test_vlm_approach_is_slow_and_continuous_during_refresh(self):
+        bbox = [60, 10, 80, 30]
+        expected = [0.2, 0, -0.16]
+        np.testing.assert_allclose(self.goto(bbox, use_vlm=True), expected)
+        for timestamp in (10.3, 11, 12):
+            self.now.return_value = timestamp
+            np.testing.assert_allclose(
+                self.goto(bbox, use_vlm=True, vision_pending=True), expected
+            )
+            self.assertEqual(motion_api._object_mission.phase, "approach")
+        self.assertEqual(self.output.getvalue().count("[APPROACH]"), 1)
+        self.assertNotIn("[SEARCH]", self.output.getvalue())
+        np.testing.assert_allclose(motion_api.move(0, 0, 0), expected)
+
+    def test_vlm_stops_when_box_unusable_and_recovers_without_phase_reset(self):
+        bbox = [40, 10, 60, 30]
+        self.goto(bbox, use_vlm=True)
+        np.testing.assert_array_equal(
+            self.goto(use_vlm=True, vision_pending=True), [0, 0, 0]
+        )
+        self.assertEqual(motion_api._object_mission.phase, "approach")
+        np.testing.assert_allclose(self.goto(bbox, use_vlm=True), [0.2, 0, 0])
+        self.assertEqual(self.output.getvalue().count("[APPROACH]"), 1)
+        self.assertGreater(self.goto(use_vlm=True)[2], 0)
+        self.assertEqual(self.output.getvalue().count("[SEARCH]"), 1)
+
+    def test_vlm_slow_speed_keeps_alignment_and_live_distance_stop(self):
+        np.testing.assert_allclose(
+            self.goto([80, 10, 100, 30], use_vlm=True), [0, 0, -0.32]
+        )
+        np.testing.assert_allclose(
+            self.goto([40, 10, 60, 30], use_vlm=True), [0.2, 0, 0]
+        )
+        np.testing.assert_array_equal(
+            self.goto(
+                [40, 10, 60, 30],
+                use_vlm=True,
+                vision_pending=True,
+                robot_position=(0.9, 0),
+            ),
+            [0, 0, 0],
+        )
+        self.assertEqual(motion_api.get_goto_status(), "SUCCESS")
+
+    def test_pending_vlm_preserves_timeout_and_distance_completion(self):
+        self.goto(vision_pending=True)
+        self.now.return_value = 70
+        np.testing.assert_array_equal(self.goto(vision_pending=True), [0, 0, 0])
+        self.assertEqual(motion_api.get_goto_status(), "FAIL")
+        self.now.return_value = 80
+        self.goto(new_command=True, vision_pending=True)
+        np.testing.assert_array_equal(
+            self.goto(robot_position=(0.5, 0), vision_pending=True), [0, 0, 0]
+        )
+        self.assertEqual(motion_api.get_goto_status(), "SUCCESS")
+
     def test_search_stops_immediately_when_target_is_seen(self):
         self.assertGreater(self.goto(heading=30)[2], 0)
         np.testing.assert_array_equal(

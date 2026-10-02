@@ -60,12 +60,15 @@ class BrowserTests(unittest.TestCase):
         )
 
     def test_configured_perception_models_are_returned_in_dashboard_state(self):
-        self.state.set_models(vlm_model="gpt-4o", vision_model="yolo11n.pt")
+        self.state.set_models(
+            vlm_model="gpt-4o", vision_model="yolo11n.pt", detection_mode="vlm"
+        )
         with self.request("/api/state") as response:
             snapshot = json.load(response)
         self.assertEqual(snapshot["model"], self.dialogue.model)
         self.assertEqual(snapshot["vlm_model"], "gpt-4o")
         self.assertEqual(snapshot["vision_model"], "yolo11n.pt")
+        self.assertEqual(snapshot["detection_mode"], "vlm")
         with self.request("/") as response:
             html = response.read().decode()
         for element_id in ("llm-model", "vlm-model", "vision-model"):
