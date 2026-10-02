@@ -96,7 +96,7 @@ class GotoObjectTests(unittest.TestCase):
                 for line in self.output.getvalue().splitlines()
                 if line.startswith("[FOUND]")
             ],
-            ["[FOUND] class=chair color=red t=7.50 d=0.500"],
+            ["[FOUND] class=chair color=red t=7.50s d=0.500m"],
         )
 
     def test_failed_mission_does_not_print_found(self):
@@ -265,7 +265,7 @@ class GotoObjectTests(unittest.TestCase):
         self.assertIn("[SEARCH]", logs)
         self.assertIn("[APPROACH] object=chair color=red", logs)
         self.assertIn("[MISSION] status=SUCCESS", logs)
-        self.assertIn("[FOUND] class=chair color=red t=0.00 d=0.500", logs)
+        self.assertIn("[FOUND] class=chair color=red t=0.00s d=0.500m", logs)
 
     def test_distance_uses_both_axes_and_can_finish_after_visual_loss(self):
         self.goto([40, 10, 60, 30], robot_position=(0.6, 0.6))

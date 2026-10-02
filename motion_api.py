@@ -354,7 +354,7 @@ def goto_object(
             elapsed = now - (_object_mission.deadline - _object_mission.timeout)
             print(
                 f"[FOUND] class={object_type} color={object_color} "
-                f"t={elapsed:.2f} d={distance:.3f}"
+                f"t={elapsed:.2f}s d={distance:.3f}m"
             )
             return _finish_object_mission("SUCCESS")
         return command

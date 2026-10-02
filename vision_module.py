@@ -1,5 +1,7 @@
 """Detect objects in camera frames with COCO-pretrained YOLOv8."""
 
+import time
+
 import cv2
 import mujoco
 import numpy as np
@@ -32,6 +34,7 @@ class VisionModule:
         self._window_open = False
         self.detections = []
         self.frame_size = (640, 480)
+        self._last_detection_log = None
 
     def __enter__(self):
         return self
@@ -86,13 +89,20 @@ class VisionModule:
             {**item, "color": color_name}
             for item, (color_name, _) in zip(detections, colors, strict=True)
         ]
+        now = time.monotonic()
+        log_detections = bool(detections) and (
+            self._last_detection_log is None or now - self._last_detection_log >= 1.0
+        )
+        if log_detections:
+            self._last_detection_log = now
         for detection, (color_name, color) in zip(detections, colors, strict=True):
             x_min, y_min, x_max, y_max = map(int, detection["bbox"])
-            print(
-                f"[DETECT] class={detection['label']} color={color_name} "
-                f"conf={detection['confidence']:.2f} "
-                f"bbox={[x_min, y_min, x_max, y_max]}"
-            )
+            if log_detections:
+                print(
+                    f"[DETECT] class={detection['label']} color={color_name} "
+                    f"conf={detection['confidence']:.2f} "
+                    f"bbox={[x_min, y_min, x_max, y_max]}"
+                )
             cv2.rectangle(frame, (x_min, y_min), (x_max, y_max), color, 2)
             label = f"{detection['label']} {detection['confidence']:.2f} {color_name}"
             cv2.putText(

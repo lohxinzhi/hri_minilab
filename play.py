@@ -923,13 +923,13 @@ def run_simulation(browser_state):
             heading_commands.append(get_turn_target_heading())
             count += 1
 
-            if count % (control_decimation * 50) == 0:
-                grav = quat_rotate_inverse(quat_xyzw, np.array([0., 0., -1.]))
-                h = mj_data.qpos[2]
-                print(f"[{time.time()-start:.1f}s] Step {count} H={h:.3f}(cmd={height_cmd:.2f}) "
-                      f"vx={mj_data.qvel[0]:.2f} vy={mj_data.qvel[1]:.2f} wz={mj_data.qvel[5]:.2f} "
-                      f"grav_z={grav[2]:.3f} "
-                      f"act=[{action_isaac.min():.2f},{action_isaac.max():.2f}]")
+            # if count % (control_decimation * 50) == 0:
+            #     grav = quat_rotate_inverse(quat_xyzw, np.array([0., 0., -1.]))
+            #     h = mj_data.qpos[2]
+            #     print(f"[{time.time()-start:.1f}s] Step {count} H={h:.3f}(cmd={height_cmd:.2f}) "
+            #           f"vx={mj_data.qvel[0]:.2f} vy={mj_data.qvel[1]:.2f} wz={mj_data.qvel[5]:.2f} "
+            #           f"grav_z={grav[2]:.3f} "
+            #           f"act=[{action_isaac.min():.2f},{action_isaac.max():.2f}]")
 
             elapsed = time.time() - step_start
             if simulation_dt - elapsed > 0:

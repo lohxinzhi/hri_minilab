@@ -258,7 +258,7 @@ class ObjectColorTests(unittest.TestCase):
 
 
 class FpvStreamTests(unittest.TestCase):
-    def test_each_detection_is_logged_to_terminal_and_gui_each_frame(self):
+    def test_detection_logs_are_limited_to_one_batch_per_second(self):
         frame = np.full((48, 64, 3), (0, 0, 255), dtype=np.uint8)
         detections = [
             {"bbox": [5, 10, 30, 40], "label": "chair", "confidence": 0.8},
@@ -277,20 +277,51 @@ class FpvStreamTests(unittest.TestCase):
             patch.object(
                 vision_module.VisionModule,
                 "get_bbox",
-                side_effect=[detections, detections, []],
+                side_effect=[detections, detections, detections, []],
             ),
-            patch.object(vision_module.cv2, "rectangle"),
-            patch.object(vision_module.cv2, "putText"),
+            patch.object(
+                vision_module.time, "monotonic", side_effect=[0, 0.99, 1, 1.1]
+            ),
+            patch.object(vision_module.cv2, "rectangle") as rectangle,
+            patch.object(vision_module.cv2, "putText") as text,
             redirect_stdout(terminal),
             state.capture_logs(),
         ):
             vision = vision_module.VisionModule()
-            for _ in range(3):
+            for _ in range(4):
                 vision.render_fpv(Mock(), Mock())
+            self.assertEqual(rectangle.call_count, 6)
+            self.assertEqual(text.call_count, 6)
         self.assertEqual(terminal.getvalue().splitlines(), expected)
         self.assertEqual(
             "".join(entry["text"] for entry in state.logs).splitlines(), expected
         )
+
+    def test_throttled_frame_still_updates_detections_and_colors(self):
+        frame = np.full((48, 64, 3), (0, 0, 255), dtype=np.uint8)
+        first = {"bbox": [5, 10, 30, 40], "label": "chair", "confidence": 0.8}
+        latest = {"bbox": [6, 10, 35, 40], "label": "chair", "confidence": 0.9}
+        with (
+            patch.object(
+                vision_module.VisionModule, "render_frame", return_value=frame
+            ),
+            patch.object(
+                vision_module.VisionModule, "get_bbox", side_effect=[[first], [latest]]
+            ),
+            patch.object(vision_module.time, "monotonic", side_effect=[10, 10.1]),
+            patch.object(vision_module.cv2, "rectangle") as rectangle,
+            patch.object(vision_module.cv2, "putText"),
+            patch("builtins.print") as log,
+        ):
+            vision = vision_module.VisionModule()
+            vision.render_fpv(Mock(), Mock())
+            frame[:] = (255, 0, 0)
+            vision.render_fpv(Mock(), Mock())
+            self.assertEqual(log.call_count, 1)
+            self.assertEqual(vision.detections, [{**latest, "color": "blue"}])
+            self.assertEqual(
+                rectangle.call_args.args[1:4], ((6, 10), (35, 40), (255, 0, 0))
+            )
 
     def test_all_classes_use_object_color_boxes_and_white_labels(self):
         labels = ["chair", "bench", "car", "bicycle", "bottle", "cup"]
