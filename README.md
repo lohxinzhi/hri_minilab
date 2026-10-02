@@ -171,6 +171,13 @@ The dashboard opens automatically at `http://127.0.0.1:8765`. Open that URL
 manually if automatic browser launch is unavailable. Use `--gui-port 8766` for
 a different port. The server listens only on the local machine.
 
+The FPV feed labels all detected COCO classes with confidence strictly above
+50%. Use `--vision-confidence 0.65` to change the threshold (range 0 to 1), or
+pass `confidence_threshold=0.65` to `VisionModule` in Python. Labels include
+the color name; boxes and text use the median HSV color inside each bounding
+box. This estimate includes background pixels. Neutral colors use saturation
+and brightness, and red hues are unwrapped across the hue boundary.
+
 Check that both camera feeds appear, then send a chat request such as
 `Move forward at 0.5 m/s for 2 seconds.` The simulation defaults to 300 seconds;
 use `--duration 600` to run for ten minutes. **End simulation** or Ctrl+C exits

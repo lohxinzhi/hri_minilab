@@ -9,10 +9,18 @@ from ultralytics import YOLO
 class VisionModule:
     """Detect objects with a pretrained model reused across frames."""
 
-    COCO_SCENE_CLASSES = frozenset({"chair", "bench", "car", "bicycle"})
+    # OpenCV HSV: hue 0..179, saturation/value 0..255. Restrict the
+    # background exclusion to dark blues so brighter blue objects remain.
+    DARK_BLUE_HSV_LOWER = (100, 40, 0)
+    DARK_BLUE_HSV_UPPER = (130, 255, 120)
 
-    def __init__(self, model: str = "yolov8n.pt") -> None:
+    def __init__(
+        self, model: str = "yolov8n.pt", *, confidence_threshold: float = 0.5
+    ) -> None:
         """Accept a pretrained model name or a path to custom model weights."""
+        if not 0 <= confidence_threshold <= 1:
+            raise ValueError("confidence_threshold must be between 0 and 1")
+        self.confidence_threshold = confidence_threshold
         self._model_path = model
         self._model: YOLO | None = None
         self._renderer: mujoco.Renderer | None = None
@@ -35,8 +43,8 @@ class VisionModule:
 
         Call repeatedly from the simulation loop on the main thread. Returns
         False when Q, Escape, or the window close button is pressed; the caller
-        can stop streaming while continuing simulation. Labels all detections;
-        selected classes get green boxes and labels, and others get grey ones.
+        can stop streaming while continuing simulation. Labels all classes above
+        the confidence threshold, with boxes matching their estimated colors.
         """
         if not self._window_open:
             cv2.namedWindow(self._window_name, cv2.WINDOW_NORMAL)
@@ -64,23 +72,80 @@ class VisionModule:
         """Return the annotated FPV frame for a browser feed."""
         frame = self.render_frame(mj_model, mj_data, camera)
         detections = self.get_bbox(frame, include_labels=True)
-        for detection in detections:
-            selected = detection["label"] in self.COCO_SCENE_CLASSES
+        # Estimate every color before drawing, so overlapping boxes cannot
+        # contaminate the pixels used for a later object's color estimate.
+        colors = [self._object_color(frame, item["bbox"]) for item in detections]
+        for detection, (color_name, color) in zip(detections, colors, strict=True):
             x_min, y_min, x_max, y_max = map(int, detection["bbox"])
-            color = (0, 255, 0) if selected else (64, 64, 64)
             cv2.rectangle(frame, (x_min, y_min), (x_max, y_max), color, 2)
-            label = f"{detection['label']} {detection['confidence']:.2f}"
+            label = f"{detection['label']} {detection['confidence']:.2f} {color_name}"
             cv2.putText(
                 frame,
                 label,
                 (x_min, max(20, y_min - 8)),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.6,
-                color,
+                (255, 255, 255),
                 2,
                 cv2.LINE_AA,
             )
         return frame
+
+    @staticmethod
+    def _object_color(frame: np.ndarray, bbox) -> tuple[str, tuple[int, int, int]]:
+        """Estimate color from median HSV inside a clipped BGR bounding box.
+
+        Exclude dark-blue background pixels before taking any HSV medians.
+        Low saturation/value identify neutral colors, whose hue alone is not
+        meaningful. Return unknown when no usable pixels remain.
+        """
+        height, width = frame.shape[:2]
+        x_min, y_min, x_max, y_max = map(int, bbox)
+        x_min, x_max = np.clip([x_min, x_max], 0, width)
+        y_min, y_max = np.clip([y_min, y_max], 0, height)
+        crop = frame[
+            y_min:y_max,
+            x_min:x_max,
+        ]
+        if crop.size == 0:
+            return "unknown", (128, 128, 128)
+        hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
+        background = cv2.inRange(
+            hsv, VisionModule.DARK_BLUE_HSV_LOWER, VisionModule.DARK_BLUE_HSV_UPPER
+        )
+        hsv = hsv[background == 0]
+        if hsv.size == 0:
+            return "unknown", (128, 128, 128)
+        hues = hsv[:, 0].astype(float)
+        # Red spans both ends of OpenCV's 0..179 hue scale. Unwrap that
+        # boundary when red pixels dominate, before taking the median.
+        if np.mean((hues < 10) | (hues >= 170)) > 0.5:
+            hues[hues >= 170] -= 180
+        hue = float(np.median(hues)) % 180
+        saturation, value = np.median(hsv[:, 1:], axis=0)
+        if value < 50:
+            name = "black"
+        elif saturation < 40:
+            name = "white" if value >= 200 else "gray"
+        elif hue < 10 or hue >= 170:
+            name = "red"
+        elif hue < 25:
+            name = "brown" if value < 180 else "orange"
+        elif hue < 35:
+            name = "yellow"
+        elif hue < 85:
+            name = "green"
+        elif hue < 100:
+            name = "cyan"
+        elif hue < 130:
+            name = "blue"
+        elif hue < 150:
+            name = "purple"
+        else:
+            name = "pink"
+        median_hsv = np.array([[[round(hue) % 180, saturation, value]]], dtype=np.uint8)
+        bgr = cv2.cvtColor(median_hsv, cv2.COLOR_HSV2BGR)[0, 0]
+        return name, tuple(int(channel) for channel in bgr)
 
     def close(self) -> None:
         """Release FPV rendering resources and close the OpenCV window."""
@@ -106,7 +171,8 @@ class VisionModule:
             include_labels: Include the class name and confidence with each box.
 
         Returns:
-            One coordinate list per detected object, or [] if none are detected.
+            One coordinate list per object strictly above confidence_threshold,
+            or [] if none pass the threshold.
             Coordinates are relative to the original frame size.
             With include_labels=True, returns dictionaries containing bbox,
             label, and confidence instead of coordinate lists.
@@ -123,14 +189,20 @@ class VisionModule:
 
         if self._model is None:
             self._model = YOLO(self._model_path)
-        result = self._model.predict(source=frame, verbose=False)[0]
+        result = self._model.predict(
+            source=frame, conf=self.confidence_threshold, verbose=False
+        )[0]
         if result.boxes is None:
             return []
         coordinates = result.boxes.xyxy.cpu().tolist()
-        if not include_labels:
-            return coordinates
-        class_ids = result.boxes.cls.cpu().tolist()
         confidences = result.boxes.conf.cpu().tolist()
+        if not include_labels:
+            return [
+                bbox
+                for bbox, confidence in zip(coordinates, confidences, strict=True)
+                if confidence > self.confidence_threshold
+            ]
+        class_ids = result.boxes.cls.cpu().tolist()
         return [
             {
                 "bbox": bbox,
@@ -140,4 +212,5 @@ class VisionModule:
             for bbox, class_id, confidence in zip(
                 coordinates, class_ids, confidences, strict=True
             )
+            if confidence > self.confidence_threshold
         ]

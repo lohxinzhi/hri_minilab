@@ -388,12 +388,20 @@ def run_simulation(browser_state):
     )
     parser.add_argument("--gui-port", type=int, default=8765, help="robot dashboard port")
     parser.add_argument(
+        "--vision-confidence",
+        type=float,
+        default=0.5,
+        help="label detections strictly above this confidence (0 to 1; default: 0.5)",
+    )
+    parser.add_argument(
         "--low_hz",
         type=float,
         default=DEFAULT_LOW_HZ,
         help="maximum shared low-rate task frequency in Hz (default: 20)",
     )
     args = parser.parse_args()
+    if not 0 <= args.vision_confidence <= 1:
+        parser.error("--vision-confidence must be between 0 and 1")
     if args.gui and args.headless:
         parser.error("--gui and --headless cannot be used together")
     if args.duration is not None and args.duration <= 0:
@@ -522,7 +530,7 @@ def run_simulation(browser_state):
     display = scene.viewer(True)
     dialogue = DialogueManager()
     sequence = RobotActionSequence()
-    vision = VisionModule()
+    vision = VisionModule(confidence_threshold=args.vision_confidence)
     gui = BrowserGUI(browser_state, dialogue, args.gui_port) if args.gui else None
     # Reuse the runtime's third-person tracking camera and existing robot FPV.
     follow_camera = mujoco.MjvCamera()
