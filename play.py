@@ -35,7 +35,7 @@ from motion_api import (
     turn,
 )
 from plot import plot_heading
-from vision_module import DEFAULT_VISION_MODEL, VisionModule
+from vision_module import DEFAULT_VISION_MODEL, DEFAULT_VLM_MODEL, VisionModule
 
 # All in-repo resources are located relative to this file, so running does not
 # depend on the current working directory or machine-specific absolute paths.
@@ -675,6 +675,11 @@ def run_simulation(browser_state):
         help="YOLO model name or weights path (default: yolov8n.pt)",
     )
     parser.add_argument(
+        "--vlm-model",
+        default=DEFAULT_VLM_MODEL,
+        help="OpenAI model for describe/VQA with image input (default: gpt-6-luna)",
+    )
+    parser.add_argument(
         "--vision-confidence",
         type=float,
         default=0.5,
@@ -817,7 +822,13 @@ def run_simulation(browser_state):
     display = scene.viewer(True)
     dialogue = DialogueManager()
     vision = VisionModule(
-        model=args.vision_model, confidence_threshold=args.vision_confidence
+        model=args.vision_model,
+        confidence_threshold=args.vision_confidence,
+        vlm_model=args.vlm_model,
+    )
+
+    browser_state.set_models(
+        vlm_model=args.vlm_model, vision_model=args.vision_model
     )
 
     def describe_current_view(action, request_id):

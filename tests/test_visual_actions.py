@@ -191,6 +191,17 @@ class VisualModelTests(unittest.TestCase):
         self.assertNotIn("Question:", text)
         np.testing.assert_array_equal(pixels, self.frame)
 
+    def test_configured_vlm_model_is_used_for_description_and_vqa(self):
+        vision = vision_module.VisionModule(vlm_model="gpt-4o", vlm_client=self.client)
+        self.addCleanup(vision.close)
+        for mode, question in (("describe", None), ("vqa", "What colour is the car?")):
+            with self.subTest(mode=mode):
+                vision.describe(self.frame, mode, question)
+                self.assertEqual(
+                    self.client.chat.completions.create.call_args.kwargs["model"],
+                    "gpt-4o",
+                )
+
     def test_vqa_uses_separate_prompt_and_quoted_question(self):
         question = 'What colour is the "car"?'
         self.vision.describe(self.frame, "vqa", question)

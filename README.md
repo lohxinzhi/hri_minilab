@@ -179,6 +179,19 @@ python play.py --map coco_scene --gui --vision-model yolov8s.pt
 python play.py --map coco_scene --gui --vision-model /path/to/custom_weights.pt
 ```
 
+Describe/VQA uses a separate OpenAI VLM, defaulting to `gpt-6-luna`.
+Use `--vlm-model` to select a model available to your account that supports
+image input and Chat Completions. See the [official OpenAI vision guide](https://developers.openai.com/api/docs/guides/images-vision).
+This model uses `OPENAI_API_KEY` and the optional `OPENAI_BASE_URL`;
+`OPENAI_MODEL` configures the dialogue planner separately.
+
+```bash
+python play.py --map coco_scene --gui --vision-model yolo11n.pt --vlm-model gpt-4o
+```
+
+The dashboard header displays the planner LLM, VLM, and object detection model.
+You can also set `VisionModule(vlm_model="gpt-4o")` directly in Python.
+
 The FPV feed labels all detected COCO classes with confidence strictly above
 50%. Use `--vision-confidence 0.65` to change the threshold (range 0 to 1), or
 pass `confidence_threshold=0.65` to `VisionModule` in Python. Labels include
@@ -206,7 +219,7 @@ optional base URL; API errors appear in the chat panel.
 
 ## Using the dashboard
 
-The page shows the configured LLM model and contains:
+The page shows the configured LLM, VLM, and object detection models and contains:
 
 - The existing third-person follow view and robot FPV, streamed side by side.
 - Labeled detection boxes in the FPV: green for selected scene classes, gray

@@ -59,6 +59,18 @@ class BrowserTests(unittest.TestCase):
             "".join(item["text"] for item in snapshot["logs"]), sink.getvalue()
         )
 
+    def test_configured_perception_models_are_returned_in_dashboard_state(self):
+        self.state.set_models(vlm_model="gpt-4o", vision_model="yolo11n.pt")
+        with self.request("/api/state") as response:
+            snapshot = json.load(response)
+        self.assertEqual(snapshot["model"], self.dialogue.model)
+        self.assertEqual(snapshot["vlm_model"], "gpt-4o")
+        self.assertEqual(snapshot["vision_model"], "yolo11n.pt")
+        with self.request("/") as response:
+            html = response.read().decode()
+        for element_id in ("llm-model", "vlm-model", "vision-model"):
+            self.assertIn(f'id="{element_id}"', html)
+
     def test_task_status_is_returned_in_chat_history(self):
         request_id = self.dialogue.submit_prompt("stop")
         self.dialogue._reply(

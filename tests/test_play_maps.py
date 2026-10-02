@@ -116,11 +116,15 @@ class PlayMapTests(unittest.TestCase):
             )
         )
 
-    def test_vision_model_launch_argument_reaches_detector(self):
-        for options, expected in (
-            ([], "yolov8n.pt"),
-            (["--vision-model", "yolov8s.pt"], "yolov8s.pt"),
-            (["--vision-model", "/tmp/custom weights.pt"], "/tmp/custom weights.pt"),
+    def test_vision_and_vlm_launch_arguments_reach_detector_and_dashboard(self):
+        for options, expected, expected_vlm in (
+            ([], "yolov8n.pt", "gpt-6-luna"),
+            (["--vision-model", "yolov8s.pt"], "yolov8s.pt", "gpt-6-luna"),
+            (
+                ["--vision-model", "/tmp/custom weights.pt", "--vlm-model", "gpt-4o"],
+                "/tmp/custom weights.pt",
+                "gpt-4o",
+            ),
         ):
             with (
                 self.subTest(model=expected),
@@ -142,10 +146,13 @@ class PlayMapTests(unittest.TestCase):
                 ),
                 redirect_stdout(StringIO()),
             ):
-                play.main()
+                state = play.BrowserState()
+                play.run_simulation(state)
                 constructor.assert_called_once_with(
-                    model=expected, confidence_threshold=0.65
+                    model=expected, confidence_threshold=0.65, vlm_model=expected_vlm
                 )
+                self.assertEqual(state.snapshot()["vision_model"], expected)
+                self.assertEqual(state.snapshot()["vlm_model"], expected_vlm)
 
     def test_invalid_low_rates_are_rejected_before_scene_creation(self):
         for rate in ("0", "-1", "nan", "inf"):

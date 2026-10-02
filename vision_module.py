@@ -16,6 +16,7 @@ from ultralytics import YOLO
 from llm_cost import configured_rates, estimate_cost
 
 DEFAULT_VISION_MODEL = "yolov8n.pt"
+DEFAULT_VLM_MODEL = "gpt-6-luna"
 
 SCENE_DESCRIPTION_PROMPT = (
     "You are the visual perception system of an indoor mobile robot. "
@@ -54,6 +55,7 @@ class VisionModule:
         model: str = DEFAULT_VISION_MODEL,
         *,
         confidence_threshold: float = 0.5,
+        vlm_model: str = DEFAULT_VLM_MODEL,
         vlm_client=None,
     ) -> None:
         """Accept a pretrained model name or a path to custom model weights."""
@@ -68,7 +70,7 @@ class VisionModule:
         self.detections = []
         self.frame_size = (640, 480)
         self._last_detection_log = None
-        self.vlm_model = "gpt-6-luna"
+        self.vlm_model = vlm_model
         self._vlm_client = vlm_client
         self._owns_vlm_client = vlm_client is None
         self._visual_requests = Queue()
