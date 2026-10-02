@@ -83,6 +83,28 @@ class GotoObjectTests(unittest.TestCase):
         self.assertEqual(self.output.getvalue().count("[MISSION] status=SUCCESS"), 1)
         self.assertEqual(self.goto().dtype, np.float32)
 
+    def test_found_log_includes_total_action_time_and_final_distance_once(self):
+        self.goto()
+        self.now.return_value = 13
+        self.goto([40, 10, 60, 30])
+        self.now.return_value = 17.5
+        self.goto([40, 10, 60, 30], robot_position=(0.3, 0.4))
+        self.goto()
+        self.assertEqual(
+            [
+                line
+                for line in self.output.getvalue().splitlines()
+                if line.startswith("[FOUND]")
+            ],
+            ["[FOUND] class=chair color=red t=7.50 d=0.500"],
+        )
+
+    def test_failed_mission_does_not_print_found(self):
+        self.goto()
+        self.now.return_value = 70
+        self.goto()
+        self.assertNotIn("[FOUND]", self.output.getvalue())
+
     def test_search_one_full_revolution_across_wrapped_headings(self):
         for heading in (179, -91, -1, 89):
             self.assertGreater(self.goto(heading=heading)[2], 0)
@@ -243,6 +265,7 @@ class GotoObjectTests(unittest.TestCase):
         self.assertIn("[SEARCH]", logs)
         self.assertIn("[APPROACH] object=chair color=red", logs)
         self.assertIn("[MISSION] status=SUCCESS", logs)
+        self.assertIn("[FOUND] class=chair color=red t=0.00 d=0.500", logs)
 
     def test_distance_uses_both_axes_and_can_finish_after_visual_loss(self):
         self.goto([40, 10, 60, 30], robot_position=(0.6, 0.6))
