@@ -1,12 +1,15 @@
 """Test the detection interface without downloading model weights."""
 
 import unittest
+from contextlib import redirect_stdout
+from io import StringIO
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import numpy as np
 
 import vision_module
+from browser_gui import BrowserState
 
 
 class GetBboxTests(unittest.TestCase):
@@ -206,6 +209,40 @@ class ObjectColorTests(unittest.TestCase):
 
 
 class FpvStreamTests(unittest.TestCase):
+    def test_each_detection_is_logged_to_terminal_and_gui_each_frame(self):
+        frame = np.full((48, 64, 3), (0, 0, 255), dtype=np.uint8)
+        detections = [
+            {"bbox": [5, 10, 30, 40], "label": "chair", "confidence": 0.8},
+            {"bbox": [2, 3, 15, 20], "label": "bottle", "confidence": 0.9},
+        ]
+        expected = [
+            "[DETECT] class=chair color=red conf=0.80 bbox=[5, 10, 30, 40]",
+            "[DETECT] class=bottle color=red conf=0.90 bbox=[2, 3, 15, 20]",
+        ] * 2
+        state = BrowserState()
+        terminal = StringIO()
+        with (
+            patch.object(
+                vision_module.VisionModule, "render_frame", return_value=frame
+            ),
+            patch.object(
+                vision_module.VisionModule,
+                "get_bbox",
+                side_effect=[detections, detections, []],
+            ),
+            patch.object(vision_module.cv2, "rectangle"),
+            patch.object(vision_module.cv2, "putText"),
+            redirect_stdout(terminal),
+            state.capture_logs(),
+        ):
+            vision = vision_module.VisionModule()
+            for _ in range(3):
+                vision.render_fpv(Mock(), Mock())
+        self.assertEqual(terminal.getvalue().splitlines(), expected)
+        self.assertEqual(
+            "".join(entry["text"] for entry in state.logs).splitlines(), expected
+        )
+
     def test_all_classes_use_object_color_boxes_and_white_labels(self):
         labels = ["chair", "bench", "car", "bicycle", "bottle", "cup"]
         detections = [

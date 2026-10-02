@@ -77,6 +77,11 @@ class VisionModule:
         colors = [self._object_color(frame, item["bbox"]) for item in detections]
         for detection, (color_name, color) in zip(detections, colors, strict=True):
             x_min, y_min, x_max, y_max = map(int, detection["bbox"])
+            print(
+                f"[DETECT] class={detection['label']} color={color_name} "
+                f"conf={detection['confidence']:.2f} "
+                f"bbox={[x_min, y_min, x_max, y_max]}"
+            )
             cv2.rectangle(frame, (x_min, y_min), (x_max, y_max), color, 2)
             label = f"{detection['label']} {detection['confidence']:.2f} {color_name}"
             cv2.putText(
