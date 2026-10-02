@@ -15,10 +15,12 @@ from contextlib import ExitStack
 from pathlib import Path
 from types import SimpleNamespace
 
+import cv2
 import mujoco
 import numpy as np
 import onnxruntime as ort
 import yaml
+from openai import OpenAIError
 
 from browser_gui import BrowserGUI, BrowserState
 from dialogue_manager import DialogueManager, validate_actions
@@ -183,9 +185,9 @@ def load_object_positions(path=DEMO_DIR / "map" / "coco_scene_positions.yaml"):
 
 
 class RobotActionSequence:
-    """Execute ordered plans on the physics thread using only the motion API."""
+    """Dispatch motion plans and independent visual requests from the physics thread."""
 
-    def __init__(self, on_status=None, object_positions=None):
+    def __init__(self, on_status=None, object_positions=None, on_describe=None):
         self.pending = deque()
         self.active = None
         self.active_index = None
@@ -200,6 +202,46 @@ class RobotActionSequence:
             load_object_positions() if object_positions is None else object_positions
         )
         self.goto_map_object = None
+        self.on_describe = on_describe
+        self._visual_plans = []
+        self._active_visual = None
+
+    def _start_visual(self, action, request_id):
+        if self.on_describe is None:
+            raise RuntimeError("visual description is unavailable")
+        print(
+            f"[EXEC] action=describe mode={action['mode']}"
+            + (
+                f" question={json.dumps(action['question'], ensure_ascii=False)}"
+                if action["mode"] == "vqa"
+                else ""
+            )
+        )
+        return self.on_describe(action, request_id)
+
+    def _poll_visual_plans(self):
+        for request_id, futures in self._visual_plans[:]:
+            if not all(future.done() for future in futures):
+                continue
+            reason = None
+            try:
+                for future in futures:
+                    future.result()
+            except (
+                OpenAIError,
+                ValueError,
+                TypeError,
+                IndexError,
+                RuntimeError,
+                cv2.error,
+            ) as exc:
+                reason = str(exc) or type(exc).__name__
+            if self.on_status is not None and request_id is not None:
+                self.on_status(
+                    request_id, "failed" if reason else "completed", reason=reason
+                )
+            self._visual_plans.remove((request_id, futures))
+            print("[DONE]")
 
     def _report_status(self, status, *, reason=None):
         if self.on_status is not None and self.request_id is not None:
@@ -225,19 +267,40 @@ class RobotActionSequence:
         self.turn_angle = None
         self.request_id = None
         self._execution_started = False
+        self._active_visual = None
         return move(0, 0, 0, duration=0, new_command=True)
 
     def replace(self, actions, history_start=None, request_id=None):
         actions = validate_actions(actions)
-        if all(action["action"] == "chat" for action in actions):
-            # Complete this reply independently of the executing motion plan.
+        if all(action["action"] in {"chat", "describe"} for action in actions):
+            # Chat and visual replies run independently of the motion plan.
             if self.on_status is not None and request_id is not None:
                 self.on_status(request_id, "executing")
+            futures = []
             for action in actions:
+                if action["action"] == "describe":
+                    try:
+                        futures.append(self._start_visual(action, request_id))
+                    except (
+                        OpenAIError,
+                        ValueError,
+                        TypeError,
+                        IndexError,
+                        RuntimeError,
+                        cv2.error,
+                    ) as exc:
+                        if self.on_status is not None and request_id is not None:
+                            self.on_status(request_id, "failed", reason=str(exc))
+                        print("[DONE]")
+                        return
+                    continue
                 print(
                     f"[EXEC] action=chat reply={json.dumps(action['reply'], ensure_ascii=False)}"
                 )
                 print(f"[DIALOGUE] {action['reply']}")
+            if futures:
+                self._visual_plans.append((request_id, futures))
+                return
             if self.on_status is not None and request_id is not None:
                 self.on_status(request_id, "completed")
             print("[DONE]")
@@ -337,10 +400,30 @@ class RobotActionSequence:
         frame_size=(640, 480),
         robot_position=(0.0, 0.0),
     ):
+        self._poll_visual_plans()
         options = {"yaw_rate_deg_s": yaw_rate_deg_s, "dt": dt}
         if self._plan_running and not self._execution_started:
             self._execution_started = True
             self._report_status("executing")
+        if self.active == "describe":
+            if not self._active_visual.done():
+                return move(0, 0, 0)
+            try:
+                self._active_visual.result()
+            except (
+                OpenAIError,
+                ValueError,
+                TypeError,
+                IndexError,
+                RuntimeError,
+                cv2.error,
+            ) as exc:
+                return self.cancel(
+                    status="failed", reason=str(exc) or type(exc).__name__
+                )
+            self.active = None
+            self.active_index = None
+            self._active_visual = None
         if self.active == "goto":
             command = self._update_goto(
                 current_heading, detections, frame_size, options, robot_position
@@ -373,6 +456,24 @@ class RobotActionSequence:
                 if key != "action"
             )
             print(f"[EXEC] action={kind}" + (f" {parameters}" if parameters else ""))
+            if kind == "describe":
+                try:
+                    # Already logged with the other sequence actions above.
+                    if self.on_describe is None:
+                        raise RuntimeError("visual description is unavailable")
+                    self._active_visual = self.on_describe(action, self.request_id)
+                except (
+                    OpenAIError,
+                    ValueError,
+                    TypeError,
+                    IndexError,
+                    RuntimeError,
+                    cv2.error,
+                ) as exc:
+                    return self.cancel(status="failed", reason=str(exc))
+                self.active = "describe"
+                self.active_index = action_index
+                return move(0, 0, 0, duration=0, new_command=True)
             if kind == "chat":
                 print(f"[DIALOGUE] {action['reply']}")
                 continue
@@ -710,11 +811,23 @@ def run_simulation(browser_state):
     print(f"[INFO] warm-up done, norm={np.linalg.norm(obs_history.buffer):.4f}")
     display = scene.viewer(True)
     dialogue = DialogueManager()
+    vision = VisionModule(confidence_threshold=args.vision_confidence)
+
+    def describe_current_view(action, request_id):
+        # MuJoCo rendering stays on the simulation thread. Cloud inference
+        # and saving the answer run on the independent vision worker.
+        frame = vision.render_frame(mj_model, mj_data, "dog_front_camera")
+        return vision.submit_visual(
+            frame,
+            action,
+            lambda answer, cost: dialogue.add_visual_response(request_id, answer, cost),
+        )
+
     sequence = RobotActionSequence(
         on_status=dialogue.update_task_status,
+        on_describe=describe_current_view,
         object_positions=load_object_positions() if args.map == "coco_scene" else {},
     )
-    vision = VisionModule(confidence_threshold=args.vision_confidence)
     gui = BrowserGUI(browser_state, dialogue, args.gui_port) if args.gui else None
     # Reuse the runtime's third-person tracking camera and existing robot FPV.
     follow_camera = mujoco.MjvCamera()

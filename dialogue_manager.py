@@ -117,6 +117,8 @@ Allowed actions:
 - {"action":"move","velocity":{"vx":0.0,"vy":0.0,"wz":0.0},"duration":1.0}
 - {"action":"turn","angle":90.0}
 - {"action":"goto","object_type":"chair","object_color":"red"}
+- {"action": "describe", "mode": "describe"}
+- {"action": "describe", "mode": "vqa", "question": "<specific question about the current view>"}
 - {"action":"stop"}
 - {"action":"chat","reply":"Your answer or clarification"}
 vx and vy are m/s; wz is rad/s. Positive vx is forward, positive vy is left,
@@ -125,7 +127,7 @@ negative right. Moves last for duration seconds (default 1 second when unspecifi
 Use ordinary walking speeds, normally at most 1 m/s and 1 rad/s, unless specified.
 Actions run sequentially; stop cancels the remainder of the list. A new plan
 replaces any unfinished earlier plan only when it contains a motion or stop
-action. A chat-only reply leaves the current motion task running. Ask a
+action. A plan containing only chat and/or describe leaves the current motion task running. Ask a
 clarification using chat when needed.
 Use goto for requests to go to, approach, or find an object. Map the requested
 object to exactly one supported COCO class: e.g. bike -> bicycle, sofa -> couch,
@@ -137,8 +139,11 @@ gray and light/dark color descriptions to the supported base color. Reject
 unsupported or ambiguous colors with chat rather than inventing a color.
 goto uses live vision to search one revolution and approach the matched object,
 with a configured mission timeout. It does not accept coordinates or a fabricated bbox.
-You have no camera images: do not invent current observations or locations.
-Explain with chat if asked to describe the view. Return JSON only.
+You have no camera images: do not invent current observations or locations
+Use describe mode for a general account of the current view.
+Use vqa mode for a specific question about what the robot can see;
+preserve the question in the question field. Do not answer visual
+questions from memory with chat. Return JSON only.
 Supported COCO classes: """
     + ", ".join(COCO_CLASSES)
     + "\nSupported colors: "
@@ -191,6 +196,19 @@ ACTION_SCHEMA = _object_schema(
                             "reply": {"type": "string"},
                         }
                     ),
+                    _object_schema(
+                        {
+                            "action": {"type": "string", "enum": ["describe"]},
+                            "mode": {"type": "string", "enum": ["describe"]},
+                        }
+                    ),
+                    _object_schema(
+                        {
+                            "action": {"type": "string", "enum": ["describe"]},
+                            "mode": {"type": "string", "enum": ["vqa"]},
+                            "question": {"type": "string"},
+                        }
+                    ),
                 ]
             },
         }
@@ -219,6 +237,8 @@ def validate_actions(actions):
             "stop": {"action"},
             "chat": {"action", "reply"},
             "goto": {"action", "object_type", "object_color"},
+            "describe": {"action", "mode"}
+            | ({"question"} if item.get("mode") == "vqa" else set()),
         }
         if not isinstance(kind, str) or kind not in fields or set(item) != fields[kind]:
             raise ValueError("unsupported action or invalid action fields")
@@ -244,6 +264,13 @@ def validate_actions(actions):
                 or item["object_color"] not in OBJECT_COLORS
             ):
                 raise ValueError("goto object_color must be a supported color or any")
+        elif kind == "describe":
+            if item["mode"] not in ("describe", "vqa"):
+                raise ValueError("describe mode must be describe or vqa")
+            if item["mode"] == "vqa" and (
+                not isinstance(item["question"], str) or not item["question"].strip()
+            ):
+                raise ValueError("vqa question must be nonempty text")
         elif kind == "chat" and (
             not isinstance(item["reply"], str) or not item["reply"].strip()
         ):
@@ -262,6 +289,7 @@ class DialogueManager:
         self.client = client
         self._owns_client = client is None
         self._history_lock = threading.Lock()
+        self._command_lock = threading.Lock()
         self._stop = threading.Event()
         self._thread = None
         self._plans = Queue()
@@ -310,13 +338,15 @@ class DialogueManager:
                 {
                     "role": message["role"],
                     "text": message["content"],
-                    "estimated_api_cost_usd": self._export_costs.get(message["id"])
+                    "estimated_api_cost_usd": message.get("estimated_cost")
+                    if message.get("kind") == "visual_response"
+                    else self._export_costs.get(message["id"])
                     if message["role"] == "assistant"
-                    and message.get("kind") != "task_result"
+                    and message.get("kind") not in {"task_result", "visual_response"}
                     else None,
                     "action": deepcopy(self._export_actions.get(message["id"], []))
                     if message["role"] == "assistant"
-                    and message.get("kind") != "task_result"
+                    and message.get("kind") not in {"task_result", "visual_response"}
                     else []
                     if message["role"] == "assistant"
                     else None,
@@ -361,6 +391,8 @@ class DialogueManager:
                 content = self._task_result(
                     actions, status, action=action, reason=reason
                 )
+                if not content:
+                    return
                 self._chat.append(
                     {
                         "id": request_id,
@@ -423,6 +455,33 @@ class DialogueManager:
                 break
         return "\n".join(lines)
 
+    def add_visual_response(self, request_id, content, estimated_cost=None):
+        """Save a VLM answer in chat and the planner's conversational history.
+
+        Called by the vision worker, never the simulation thread.
+        """
+        with self._history_lock:
+            self.history.append({"role": "assistant", "content": content})
+        with self._chat_lock:
+            status = next(
+                (
+                    message["status"]
+                    for message in self._chat
+                    if message["id"] == request_id
+                ),
+                "executing",
+            )
+            self._chat.append(
+                {
+                    "id": request_id,
+                    "role": "assistant",
+                    "kind": "visual_response",
+                    "content": content,
+                    "status": status,
+                    "estimated_cost": estimated_cost,
+                }
+            )
+
     def _reply(self, request_id, content, status, actions=None, estimated_cost=None):
         with self._chat_lock:
             self._export_costs[request_id] = estimated_cost
@@ -442,6 +501,8 @@ class DialogueManager:
                 if message["id"] == request_id and message["role"] == "user":
                     message["status"] = status
                     break
+            if not content:
+                return
             self._chat.append(
                 {
                     "id": request_id,
@@ -475,6 +536,8 @@ class DialogueManager:
                     else f"{color} {action['object_type']}"
                 )
                 lines.append(f"Search for and approach {target}.")
+            elif kind == "describe":
+                continue
             else:
                 lines.append("Stop and cancel remaining actions.")
                 break
@@ -488,14 +551,16 @@ class DialogueManager:
         """
         if not isinstance(user_prompt, str) or not user_prompt.strip():
             raise ValueError("user prompt must be nonempty text")
-        with self._history_lock:
+        with self._command_lock:
             self._last_api_cost = None
-            self.history.append({"role": "user", "content": user_prompt.strip()})
+            with self._history_lock:
+                self.history.append({"role": "user", "content": user_prompt.strip()})
+                messages = deepcopy(self.history)
             if self.client is None:
                 self.client = OpenAI(timeout=30.0, max_retries=0)
             completion = self.client.chat.completions.create(
                 model=self.model,
-                messages=deepcopy(self.history),
+                messages=messages,
                 response_format={
                     "type": "json_schema",
                     "json_schema": {
@@ -513,9 +578,10 @@ class DialogueManager:
             if not isinstance(payload, dict) or set(payload) != {"actions"}:
                 raise ValueError("LLM response must contain only an actions list")
             actions = validate_actions(payload["actions"])
-            self.history.append(
-                {"role": "assistant", "content": json.dumps({"actions": actions})}
-            )
+            with self._history_lock:
+                self.history.append(
+                    {"role": "assistant", "content": json.dumps({"actions": actions})}
+                )
             return actions
 
     def start(self):
