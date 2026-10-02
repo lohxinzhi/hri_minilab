@@ -112,9 +112,13 @@ class GotoExecutionTests(unittest.TestCase):
         capture.__enter__()
         self.addCleanup(capture.__exit__, None, None, None)
 
-    def update(self, detections=(), heading=0):
+    def update(self, detections=(), heading=0, robot_position=(0, 0)):
         return self.sequence.update(
-            heading, dt=0.02, detections=detections, frame_size=(100, 100)
+            heading,
+            dt=0.02,
+            detections=detections,
+            frame_size=(100, 100),
+            robot_position=robot_position,
         )
 
     def test_live_class_and_color_matching_then_following_action(self):
@@ -128,7 +132,13 @@ class GotoExecutionTests(unittest.TestCase):
         self.assertIn("[SEARCH]", self.output.getvalue())
         np.testing.assert_array_equal(self.update([detection()]), [0.5, 0, 0])
         self.assertIn("[APPROACH]", self.output.getvalue())
-        self.assertGreater(self.update([detection(bbox=[40, 0, 60, 70])])[2], 0)
+        position = self.sequence.object_positions["chair_red"]
+        self.assertGreater(
+            self.update(
+                [detection()], robot_position=(position["x"] + 0.5, position["y"])
+            )[2],
+            0,
+        )
         self.assertEqual(self.sequence.active, "turn")
         self.assertEqual(self.sequence.active_index, 5)
         self.assertFalse(self.sequence.needs_vision)
@@ -144,6 +154,7 @@ class GotoExecutionTests(unittest.TestCase):
             self.update([detection("blue", confidence=0.95), detection(confidence=0.7)])
         self.assertEqual(controller.call_args.args, ("chair", "any", [40, 10, 60, 30]))
         self.assertTrue(controller.call_args.kwargs["new_command"])
+        self.assertEqual(controller.call_args.kwargs["object_position"], (-6.0, 0.0))
         self.update([])
         self.assertEqual(self.sequence.active, "goto")
         self.assertIn("[SEARCH]", self.output.getvalue())
@@ -158,6 +169,32 @@ class GotoExecutionTests(unittest.TestCase):
         self.assertIsNone(self.sequence.active_index)
         self.assertNotIn("[DONE]", self.output.getvalue())
         self.assertNotIn("[EXEC] action=turn", self.output.getvalue())
+
+    def test_yaml_positions_only_affect_completion_not_steering(self):
+        commands = []
+        for position in ((50, 20), (-50, -20)):
+            self.sequence.object_positions = {
+                "chair_red": {
+                    "coco_class": "chair",
+                    "expected_color": "red",
+                    "x": position[0],
+                    "y": position[1],
+                },
+            }
+            self.sequence.replace([goto()])
+            commands.append(self.update([detection(bbox=[80, 0, 100, 99])]))
+        np.testing.assert_array_equal(commands[0], commands[1])
+        self.assertLess(commands[0][2], 0)
+        self.assertEqual(self.sequence.active, "goto")
+
+    def test_unmapped_target_fails_without_starting_search(self):
+        self.sequence.replace([goto("any", "person")])
+        np.testing.assert_array_equal(self.update(), [0, 0, 0])
+        self.assertIsNone(self.sequence.active)
+        self.assertIn(
+            "object has no position in the active map", self.output.getvalue()
+        )
+        self.assertNotIn("[SEARCH]", self.output.getvalue())
 
     def test_cancel_and_replacement_stop_missions_and_restart_same_target(self):
         self.sequence.replace([goto()])
@@ -189,8 +226,12 @@ class GotoLoopTests(unittest.TestCase):
         )
         manager = DialogueManager(client=client)
         manager.submit_prompt("Go to the red chair")
+        positions = play.load_object_positions()
+        positions["chair_red"]["x"] = 0.1
+        positions["chair_red"]["y"] = 0.1
         with (
             patch.object(play, "DialogueManager", return_value=manager),
+            patch.object(play, "load_object_positions", return_value=positions),
             patch.object(play, "VisionModule") as constructor,
             patch.object(
                 play, "goto_object", wraps=motion_api.goto_object

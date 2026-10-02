@@ -13,6 +13,9 @@ from browser_gui import BrowserState
 
 class GotoObjectTests(unittest.TestCase):
     def setUp(self):
+        timeout = patch.object(motion_api, "GOTO_TIMEOUT_SECONDS", 60.0)
+        timeout.start()
+        self.addCleanup(timeout.stop)
         clock = patch.object(motion_api.time, "monotonic", return_value=10.0)
         self.now = clock.start()
         self.addCleanup(clock.stop)
@@ -27,6 +30,8 @@ class GotoObjectTests(unittest.TestCase):
         self.addCleanup(capture.__exit__, None, None, None)
 
     def goto(self, bbox=None, heading=0, **kwargs):
+        kwargs.setdefault("robot_position", (3.0, 0.0))
+        kwargs.setdefault("object_position", (0.0, 0.0))
         return motion_api.goto_object(
             "chair",
             "red",
@@ -57,14 +62,21 @@ class GotoObjectTests(unittest.TestCase):
             "red",
             [640, 100, 840, 300],
             current_yaw_deg=0,
+            robot_position=(3.0, 0.0),
+            object_position=(0.0, 0.0),
             frame_size=(1000, 1000),
         )
         np.testing.assert_allclose(command, [0.5, 0, -0.48])
 
-    def test_height_threshold_completes_and_stops_once(self):
-        self.goto([40, 0, 60, 69])
+    def test_distance_threshold_completes_and_stops_once(self):
+        self.goto([40, 0, 60, 99])
         self.assertEqual(motion_api.get_goto_status(), "RUNNING")
-        np.testing.assert_array_equal(self.goto([40, 0, 60, 70]), [0, 0, 0])
+        np.testing.assert_array_equal(
+            self.goto([40, 10, 60, 30], robot_position=(0.8, 0)), [0.5, 0, 0]
+        )
+        np.testing.assert_array_equal(
+            self.goto([40, 10, 60, 30], robot_position=(0.79, 0)), [0, 0, 0]
+        )
         self.assertEqual(motion_api.get_goto_status(), "SUCCESS")
         np.testing.assert_array_equal(motion_api.move(0, 0, 0), [0, 0, 0])
         np.testing.assert_array_equal(self.goto(), [0, 0, 0])
@@ -142,7 +154,7 @@ class GotoObjectTests(unittest.TestCase):
 
     def test_explicit_restart_and_target_change_start_new_missions(self):
         self.assertIsNone(motion_api.get_goto_status())
-        self.goto([40, 0, 60, 70])
+        self.goto([40, 10, 60, 30], robot_position=(0.5, 0))
         self.now.return_value = 100
         self.assertGreater(self.goto(new_command=True)[2], 0)
         self.assertEqual(motion_api.get_goto_status(), "RUNNING")
@@ -152,6 +164,8 @@ class GotoObjectTests(unittest.TestCase):
             "blue",
             [40, 10, 60, 30],
             current_yaw_deg=0,
+            robot_position=(3.0, 0.0),
+            object_position=(0.0, 0.0),
             frame_size=(100, 100),
         )
         np.testing.assert_array_equal(command, [0.5, 0, 0])
@@ -162,6 +176,8 @@ class GotoObjectTests(unittest.TestCase):
                 "car",
                 "blue",
                 current_yaw_deg=0,
+                robot_position=(3.0, 0.0),
+                object_position=(0.0, 0.0),
             )[2],
             0,
         )
@@ -180,6 +196,8 @@ class GotoObjectTests(unittest.TestCase):
             {"dt": 0},
             {"object_type": ""},
             {"object_color": ""},
+            {"robot_position": (float("nan"), 0)},
+            {"object_position": (0, 1, 2)},
         ):
             with self.subTest(kwargs=kwargs):
                 inputs = {
@@ -188,6 +206,8 @@ class GotoObjectTests(unittest.TestCase):
                     "bbox": [40, 10, 60, 30],
                     "current_yaw_deg": 0,
                     "frame_size": (100, 100),
+                    "robot_position": (3.0, 0.0),
+                    "object_position": (0.0, 0.0),
                 }
                 inputs.update(kwargs)
                 with self.assertRaises(ValueError):
@@ -201,23 +221,42 @@ class GotoObjectTests(unittest.TestCase):
                 "chair",
                 "red",
                 [400, 100, 600, 300],
+                robot_position=(3.0, 0.0),
+                object_position=(0.0, 0.0),
                 frame_size=(1000, 1000),
                 new_command=True,
             )
             move.assert_called_with(0.5, 0, -0.0, new_command=True)
             np.testing.assert_array_equal(
-                motion_api.approach("chair", "red", None), [0, 0, 0]
+                motion_api.approach(
+                    "chair", "red", None, robot_position=(3, 0), object_position=(0, 0)
+                ),
+                [0, 0, 0],
             )
 
     def test_mission_logs_reach_gui_console(self):
         state = BrowserState()
         with state.capture_logs():
             self.goto()
-            self.goto([40, 0, 60, 70])
+            self.goto([40, 10, 60, 30], robot_position=(0.5, 0))
         logs = "".join(entry["text"] for entry in state.logs)
         self.assertIn("[SEARCH]", logs)
         self.assertIn("[APPROACH] object=chair color=red", logs)
         self.assertIn("[MISSION] status=SUCCESS", logs)
+
+    def test_distance_uses_both_axes_and_can_finish_after_visual_loss(self):
+        self.goto([40, 10, 60, 30], robot_position=(0.6, 0.6))
+        self.assertEqual(motion_api.get_goto_status(), "RUNNING")
+        np.testing.assert_array_equal(
+            self.goto(None, robot_position=(0.4, 0.6)), [0, 0, 0]
+        )
+        self.assertEqual(motion_api.get_goto_status(), "SUCCESS")
+
+    def test_steering_is_independent_of_object_world_direction(self):
+        first = self.goto([80, 10, 100, 90], object_position=(50, 20))
+        second = self.goto([80, 10, 100, 90], object_position=(-50, -20))
+        np.testing.assert_array_equal(first, second)
+        self.assertLess(first[2], 0)
 
 
 if __name__ == "__main__":

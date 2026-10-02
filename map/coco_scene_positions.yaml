@@ -1,0 +1,32 @@
+# Main object body origins in world-frame meters (x, y).
+objects:
+  chair_red:
+    coco_class: chair
+    expected_color: red
+    x: -3.0
+    y: 5.196152423
+  chair_blue:
+    coco_class: chair
+    expected_color: blue
+    x: -6.0
+    y: 0.0
+  bench:
+    coco_class: bench
+    expected_color: brown
+    x: -3.0
+    y: -5.196152423
+  car:
+    coco_class: car
+    expected_color: black
+    x: 6.0
+    y: 0.0
+  bicycle:
+    coco_class: bicycle
+    expected_color: brown
+    x: 3.0
+    y: 5.196152423
+  supra_blue:
+    coco_class: car
+    expected_color: blue
+    x: 3.0
+    y: -5.196152423

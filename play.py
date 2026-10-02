@@ -175,10 +175,16 @@ def update_turn_command(turn_angle, current_heading, **controller_options):
     return turn_angle, command
 
 
+def load_object_positions(path=DEMO_DIR / "map" / "coco_scene_positions.yaml"):
+    """Load main-object class, color and world-frame positions from the map YAML."""
+    with Path(path).open() as stream:
+        return yaml.safe_load(stream)["objects"]
+
+
 class RobotActionSequence:
     """Execute ordered plans on the physics thread using only the motion API."""
 
-    def __init__(self, on_status=None):
+    def __init__(self, on_status=None, object_positions=None):
         self.pending = deque()
         self.active = None
         self.active_index = None
@@ -189,6 +195,10 @@ class RobotActionSequence:
         self.on_status = on_status
         self.request_id = None
         self._execution_started = False
+        self.object_positions = (
+            load_object_positions() if object_positions is None else object_positions
+        )
+        self.goto_map_object = None
 
     def _report_status(self, status):
         if self.on_status is not None and self.request_id is not None:
@@ -200,6 +210,7 @@ class RobotActionSequence:
         if self.active == "goto":
             cancel_goto_object()
         self.goto_target = None
+        self.goto_map_object = None
         self._plan_running = False
         self.pending.clear()
         self.active = None
@@ -244,24 +255,56 @@ class RobotActionSequence:
         )
 
     def _update_goto(
-        self, current_heading, detections, frame_size, options, *, new_command=False
+        self,
+        current_heading,
+        detections,
+        frame_size,
+        options,
+        robot_position,
+        *,
+        new_command=False,
     ):
         target = self.goto_target
+        candidates = [
+            item
+            for item in self.object_positions.values()
+            if item["coco_class"] == target["object_type"]
+            and (
+                target["object_color"] == "any"
+                or item["expected_color"] == target["object_color"]
+            )
+        ]
+        if not candidates:
+            print(
+                "[MISSION] status=FAIL reason=object has no position in the active map"
+            )
+            return self.cancel(status="failed")
+        colors = {item["expected_color"] for item in candidates}
+        if self.goto_map_object is not None:
+            colors = {self.goto_map_object["expected_color"]}
         matches = [
             detection
             for detection in detections
             if detection["label"] == target["object_type"]
-            and (
-                target["object_color"] == "any"
-                or detection["color"] == target["object_color"]
-            )
+            and detection["color"] in colors
         ]
         detection = max(matches, key=lambda item: item["confidence"], default=None)
+        if self.goto_map_object is None and detection is not None:
+            # Associate a visual class/color with YAML metadata. Coordinates
+            # never select a visible target or contribute to steering.
+            self.goto_map_object = next(
+                item
+                for item in candidates
+                if item["expected_color"] == detection["color"]
+            )
+        map_object = self.goto_map_object or candidates[0]
         command = goto_object(
             target["object_type"],
             target["object_color"],
             detection["bbox"] if detection is not None else None,
             current_yaw_deg=current_heading,
+            robot_position=robot_position,
+            object_position=(map_object["x"], map_object["y"]),
             frame_size=frame_size,
             new_command=new_command,
             **options,
@@ -273,6 +316,7 @@ class RobotActionSequence:
             self.active = None
             self.active_index = None
             self.goto_target = None
+            self.goto_map_object = None
         return command
 
     def update(
@@ -283,6 +327,7 @@ class RobotActionSequence:
         *,
         detections=(),
         frame_size=(640, 480),
+        robot_position=(0.0, 0.0),
     ):
         options = {"yaw_rate_deg_s": yaw_rate_deg_s, "dt": dt}
         if self._plan_running and not self._execution_started:
@@ -290,7 +335,7 @@ class RobotActionSequence:
             self._report_status("executing")
         if self.active == "goto":
             command = self._update_goto(
-                current_heading, detections, frame_size, options
+                current_heading, detections, frame_size, options, robot_position
             )
             if self.active == "goto" or not self._plan_running:
                 return command
@@ -357,6 +402,7 @@ class RobotActionSequence:
                     detections,
                     frame_size,
                     options,
+                    robot_position,
                     new_command=True,
                 )
                 if self.active == "goto" or not self._plan_running:
@@ -656,7 +702,10 @@ def run_simulation(browser_state):
     print(f"[INFO] warm-up done, norm={np.linalg.norm(obs_history.buffer):.4f}")
     display = scene.viewer(True)
     dialogue = DialogueManager()
-    sequence = RobotActionSequence(on_status=dialogue.update_task_status)
+    sequence = RobotActionSequence(
+        on_status=dialogue.update_task_status,
+        object_positions=load_object_positions() if args.map == "coco_scene" else {},
+    )
     vision = VisionModule(confidence_threshold=args.vision_confidence)
     gui = BrowserGUI(browser_state, dialogue, args.gui_port) if args.gui else None
     # Reuse the runtime's third-person tracking camera and existing robot FPV.
@@ -742,6 +791,7 @@ def run_simulation(browser_state):
                 dt=simulation_dt,
                 detections=vision.detections,
                 frame_size=vision.frame_size,
+                robot_position=mj_data.qpos[:2].copy(),
             )
 
             browser_state.set_active_action(sequence.active_index)

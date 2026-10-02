@@ -5,7 +5,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
-GOTO_TIMEOUT_SECONDS = 20.0  # Shared wall-clock limit for search and approach.
+GOTO_TIMEOUT_SECONDS = 60.0  # Shared wall-clock limit for search and approach.
+APPROACH_DISTANCE_METERS = 0.8
 
 _velocity = np.zeros(3, dtype=np.float32)
 _deadline = 0.0
@@ -174,11 +175,27 @@ def _normalized_bbox(bbox, frame_size):
     return box
 
 
+def _object_distance(robot_position, object_position):
+    robot = np.asarray(robot_position, dtype=float)
+    target = np.asarray(object_position, dtype=float)
+    if (
+        robot.shape != (2,)
+        or target.shape != (2,)
+        or not np.isfinite([robot, target]).all()
+    ):
+        raise ValueError(
+            "robot_position and object_position must be finite 2D coordinates"
+        )
+    return float(np.linalg.norm(target - robot))
+
+
 def approach(
     object_type: str,
     object_color: str,
     bbox,
     *,
+    robot_position,
+    object_position,
     frame_size=(640, 480),
     new_command: bool = False,
 ) -> np.ndarray:
@@ -187,13 +204,14 @@ def approach(
     Horizontal error is box-center x / frame width minus 0.5. Positive
     image error requires a clockwise (negative wz) turn. Forward speed is
     0.5 m/s when abs(error) < 0.25; yaw rate is -2 * error rad/s.
-    Stop when box height / frame height reaches 0.70. A missing box stops
+    Stop when the world-frame 2D distance is strictly below 0.8 m. A missing box stops
     movement; goto_object handles the transition back to search.
     """
     box = _normalized_bbox(bbox, frame_size)
+    distance = _object_distance(robot_position, object_position)
     if new_command:
         print(f"[APPROACH] object={object_type} color={object_color}")
-    if box is None or box[3] - box[1] >= 0.70:
+    if box is None or distance < APPROACH_DISTANCE_METERS:
         return move(0, 0, 0, duration=0, new_command=True)
     error = (box[0] + box[2]) / 2 - 0.5
     vx = 0.5 if abs(error) < 0.25 else 0.0
@@ -252,6 +270,8 @@ def goto_object(
     bbox=None,
     *,
     current_yaw_deg: float,
+    robot_position,
+    object_position,
     frame_size=(640, 480),
     new_command: bool = False,
     yaw_rate_deg_s: float = 0.0,
@@ -263,6 +283,9 @@ def goto_object(
     The caller selects a matching vision detection and supplies its current
     pixel bbox, or None when no matching object is visible. Supply the current
     yaw in degrees and camera frame_size=(width, height) on each control update.
+    robot_position and object_position are world-frame (x, y) in meters; the
+    caller obtains the target position from the scene YAML. Completion depends
+    only on their distance being strictly below APPROACH_DISTANCE_METERS.
     Physics and vision must continue updating between calls on the control
     thread; this function does not render cameras or block the simulation.
 
@@ -282,6 +305,7 @@ def goto_object(
     if dt is not None and (not np.isfinite(dt) or dt <= 0):
         raise ValueError("dt must be finite and positive")
     box = _normalized_bbox(bbox, frame_size)
+    distance = _object_distance(robot_position, object_position)
     now = time.monotonic()
     if (
         new_command
@@ -302,7 +326,11 @@ def goto_object(
         return _finish_object_mission(
             "FAIL", f"{_object_mission.timeout:g}-second timeout"
         )
-    phase = "approach" if box is not None else "search"
+    phase = (
+        "approach"
+        if box is not None or distance < APPROACH_DISTANCE_METERS
+        else "search"
+    )
     entering = _object_mission.phase != phase
     _object_mission.phase = phase
     if phase == "approach":
@@ -310,10 +338,12 @@ def goto_object(
             object_type,
             object_color,
             bbox,
+            robot_position=robot_position,
+            object_position=object_position,
             frame_size=frame_size,
             new_command=entering,
         )
-        if box[3] - box[1] >= 0.70:
+        if distance < APPROACH_DISTANCE_METERS:
             return _finish_object_mission("SUCCESS")
         return command
     command = search(
