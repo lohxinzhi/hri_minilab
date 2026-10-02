@@ -11,12 +11,112 @@ from openai import OpenAI, OpenAIError
 
 from llm_cost import configured_rates, estimate_cost
 
-SYSTEM_PROMPT = """You are the dialogue manager of a robot dog in MuJoCo.
+COCO_CLASSES = [
+    "person",
+    "bicycle",
+    "car",
+    "motorcycle",
+    "airplane",
+    "bus",
+    "train",
+    "truck",
+    "boat",
+    "traffic light",
+    "fire hydrant",
+    "stop sign",
+    "parking meter",
+    "bench",
+    "bird",
+    "cat",
+    "dog",
+    "horse",
+    "sheep",
+    "cow",
+    "elephant",
+    "bear",
+    "zebra",
+    "giraffe",
+    "backpack",
+    "umbrella",
+    "handbag",
+    "tie",
+    "suitcase",
+    "frisbee",
+    "skis",
+    "snowboard",
+    "sports ball",
+    "kite",
+    "baseball bat",
+    "baseball glove",
+    "skateboard",
+    "surfboard",
+    "tennis racket",
+    "bottle",
+    "wine glass",
+    "cup",
+    "fork",
+    "knife",
+    "spoon",
+    "bowl",
+    "banana",
+    "apple",
+    "sandwich",
+    "orange",
+    "broccoli",
+    "carrot",
+    "hot dog",
+    "pizza",
+    "donut",
+    "cake",
+    "chair",
+    "couch",
+    "potted plant",
+    "bed",
+    "dining table",
+    "toilet",
+    "tv",
+    "laptop",
+    "mouse",
+    "remote",
+    "keyboard",
+    "cell phone",
+    "microwave",
+    "oven",
+    "toaster",
+    "sink",
+    "refrigerator",
+    "book",
+    "clock",
+    "vase",
+    "scissors",
+    "teddy bear",
+    "hair drier",
+    "toothbrush",
+]
+OBJECT_COLORS = [
+    "any",
+    "red",
+    "orange",
+    "brown",
+    "yellow",
+    "green",
+    "cyan",
+    "blue",
+    "purple",
+    "pink",
+    "white",
+    "gray",
+    "black",
+]
+
+SYSTEM_PROMPT = (
+    """You are the dialogue manager of a robot dog in MuJoCo.
 Convert the latest request into a JSON object containing an ordered actions list.
 Only generate the actions needed for this request; do not repeat earlier plans.
 Allowed actions:
 - {"action":"move","velocity":{"vx":0.0,"vy":0.0,"wz":0.0},"duration":1.0}
 - {"action":"turn","angle":90.0}
+- {"action":"goto","object_type":"chair","object_color":"red"}
 - {"action":"stop"}
 - {"action":"chat","reply":"Your answer or clarification"}
 vx and vy are m/s; wz is rad/s. Positive vx is forward, positive vy is left,
@@ -25,10 +125,23 @@ negative right. Moves last for duration seconds (default 1 second when unspecifi
 Use ordinary walking speeds, normally at most 1 m/s and 1 rad/s, unless specified.
 Actions run sequentially; stop cancels the remainder of the list. A new plan
 replaces any unfinished earlier plan. Ask a clarification using chat when needed.
-You have no camera images or navigation: do not invent visual observations or
-object locations. Explain with chat if asked to describe the view or approach an
-object, since those actions are not implemented. Return JSON only.
-"""
+Use goto for requests to go to, approach, or find an object. Map the requested
+object to exactly one supported COCO class: e.g. bike -> bicycle, sofa -> couch,
+Toyota Supra or Lamborghini -> car. Reject unmappable objects (e.g. a door)
+with a chat reply explaining the reason; never invent a class or approximate
+an unrelated object. Ask for clarification through chat when mapping is ambiguous.
+Use object_color="any" if the user does not specify a color. Normalize grey to
+gray and light/dark color descriptions to the supported base color. Reject
+unsupported or ambiguous colors with chat rather than inventing a color.
+goto uses live vision to search one revolution and approach the matched object,
+with a 60-second timeout. It does not accept coordinates or a fabricated bbox.
+You have no camera images: do not invent current observations or locations.
+Explain with chat if asked to describe the view. Return JSON only.
+Supported COCO classes: """
+    + ", ".join(COCO_CLASSES)
+    + "\nSupported colors: "
+    + ", ".join(OBJECT_COLORS)
+)
 
 
 def _object_schema(properties):
@@ -65,6 +178,13 @@ ACTION_SCHEMA = _object_schema(
                     _object_schema({"action": {"type": "string", "enum": ["stop"]}}),
                     _object_schema(
                         {
+                            "action": {"type": "string", "enum": ["goto"]},
+                            "object_type": {"type": "string", "enum": COCO_CLASSES},
+                            "object_color": {"type": "string", "enum": OBJECT_COLORS},
+                        }
+                    ),
+                    _object_schema(
+                        {
                             "action": {"type": "string", "enum": ["chat"]},
                             "reply": {"type": "string"},
                         }
@@ -96,6 +216,7 @@ def validate_actions(actions):
             "turn": {"action", "angle"},
             "stop": {"action"},
             "chat": {"action", "reply"},
+            "goto": {"action", "object_type", "object_color"},
         }
         if not isinstance(kind, str) or kind not in fields or set(item) != fields[kind]:
             raise ValueError("unsupported action or invalid action fields")
@@ -110,6 +231,17 @@ def validate_actions(actions):
                 raise ValueError("move duration must be non-negative")
         elif kind == "turn":
             number(item["angle"])
+        elif kind == "goto":
+            if (
+                not isinstance(item["object_type"], str)
+                or item["object_type"] not in COCO_CLASSES
+            ):
+                raise ValueError("goto object_type must be a supported COCO class")
+            if (
+                not isinstance(item["object_color"], str)
+                or item["object_color"] not in OBJECT_COLORS
+            ):
+                raise ValueError("goto object_color must be a supported color or any")
         elif kind == "chat" and (
             not isinstance(item["reply"], str) or not item["reply"].strip()
         ):
@@ -238,6 +370,14 @@ class DialogueManager:
                 lines.append(
                     f"Turn {action['angle']:g}° relative to the current heading."
                 )
+            elif kind == "goto":
+                color = action["object_color"]
+                target = (
+                    action["object_type"]
+                    if color == "any"
+                    else f"{color} {action['object_type']}"
+                )
+                lines.append(f"Search for and approach {target}.")
             else:
                 lines.append("Stop and cancel remaining actions.")
                 break

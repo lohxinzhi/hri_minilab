@@ -282,6 +282,10 @@ class FpvStreamTests(unittest.TestCase):
                 [call.args[5] for call in text.call_args_list],
                 [(255, 255, 255)] * 6,
             )
+            self.assertEqual(vision.frame_size, (64, 48))
+            self.assertEqual(
+                vision.detections, [{**item, "color": "red"} for item in detections]
+            )
 
     def test_overlapping_annotations_do_not_change_color_estimates(self):
         frame = np.full((48, 64, 3), (255, 0, 0), dtype=np.uint8)

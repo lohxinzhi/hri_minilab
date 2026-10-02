@@ -26,6 +26,8 @@ class VisionModule:
         self._renderer: mujoco.Renderer | None = None
         self._window_name = "Robot dog FPV"
         self._window_open = False
+        self.detections = []
+        self.frame_size = (640, 480)
 
     def __enter__(self):
         return self
@@ -75,6 +77,11 @@ class VisionModule:
         # Estimate every color before drawing, so overlapping boxes cannot
         # contaminate the pixels used for a later object's color estimate.
         colors = [self._object_color(frame, item["bbox"]) for item in detections]
+        self.frame_size = (frame.shape[1], frame.shape[0])
+        self.detections = [
+            {**item, "color": color_name}
+            for item, (color_name, _) in zip(detections, colors, strict=True)
+        ]
         for detection, (color_name, color) in zip(detections, colors, strict=True):
             x_min, y_min, x_max, y_max = map(int, detection["bbox"])
             print(

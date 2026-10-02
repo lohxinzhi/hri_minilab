@@ -8,12 +8,13 @@ Joint order:
 
 """
 import json
-import time
-from pathlib import Path
 import sys
+import time
 from collections import deque
 from contextlib import ExitStack
+from pathlib import Path
 from types import SimpleNamespace
+
 import mujoco
 import numpy as np
 import onnxruntime as ort
@@ -21,10 +22,17 @@ import yaml
 
 from browser_gui import BrowserGUI, BrowserState
 from dialogue_manager import DialogueManager, validate_actions
-from vision_module import VisionModule
-from motion_api import get_turn_target_heading, is_move_active, move, turn
+from motion_api import (
+    cancel_goto_object,
+    get_goto_status,
+    get_turn_target_heading,
+    goto_object,
+    is_move_active,
+    move,
+    turn,
+)
 from plot import plot_heading
-
+from vision_module import VisionModule
 
 # All in-repo resources are located relative to this file, so running does not
 # depend on the current working directory or machine-specific absolute paths.
@@ -177,8 +185,12 @@ class RobotActionSequence:
         self.next_index = None
         self.turn_angle = None
         self._plan_running = False
+        self.goto_target = None
 
     def cancel(self):
+        if self.active == "goto":
+            cancel_goto_object()
+        self.goto_target = None
         self._plan_running = False
         self.pending.clear()
         self.active = None
@@ -199,8 +211,60 @@ class RobotActionSequence:
             self._plan_running = False
             print("[DONE]")
 
-    def update(self, current_heading, yaw_rate_deg_s=0.0, dt=None):
+    @property
+    def needs_vision(self):
+        return self.active == "goto" or any(
+            item["action"] == "goto" for item in self.pending
+        )
+
+    def _update_goto(
+        self, current_heading, detections, frame_size, options, *, new_command=False
+    ):
+        target = self.goto_target
+        matches = [
+            detection
+            for detection in detections
+            if detection["label"] == target["object_type"]
+            and (
+                target["object_color"] == "any"
+                or detection["color"] == target["object_color"]
+            )
+        ]
+        detection = max(matches, key=lambda item: item["confidence"], default=None)
+        command = goto_object(
+            target["object_type"],
+            target["object_color"],
+            detection["bbox"] if detection is not None else None,
+            current_yaw_deg=current_heading,
+            frame_size=frame_size,
+            new_command=new_command,
+            **options,
+        )
+        status = get_goto_status()
+        if status == "FAIL":
+            return self.cancel()
+        if status == "SUCCESS":
+            self.active = None
+            self.active_index = None
+            self.goto_target = None
+        return command
+
+    def update(
+        self,
+        current_heading,
+        yaw_rate_deg_s=0.0,
+        dt=None,
+        *,
+        detections=(),
+        frame_size=(640, 480),
+    ):
         options = {"yaw_rate_deg_s": yaw_rate_deg_s, "dt": dt}
+        if self.active == "goto":
+            command = self._update_goto(
+                current_heading, detections, frame_size, options
+            )
+            if self.active == "goto" or not self._plan_running:
+                return command
         if self.active == "move":
             command = move(0, 0, 0)
             if is_move_active():
@@ -237,8 +301,11 @@ class RobotActionSequence:
             if kind == "move":
                 velocity = action["velocity"]
                 command = move(
-                    velocity["vx"], velocity["vy"], velocity["wz"],
-                    duration=action["duration"], new_command=True,
+                    velocity["vx"],
+                    velocity["vy"],
+                    velocity["wz"],
+                    duration=action["duration"],
+                    new_command=True,
                 )
                 if is_move_active():
                     self.active = "move"
@@ -251,6 +318,19 @@ class RobotActionSequence:
                 if self.turn_angle is not None:
                     self.active = "turn"
                     self.active_index = action_index
+                    return command
+            elif kind == "goto":
+                self.active = "goto"
+                self.active_index = action_index
+                self.goto_target = action
+                command = self._update_goto(
+                    current_heading,
+                    detections,
+                    frame_size,
+                    options,
+                    new_command=True,
+                )
+                if self.active == "goto" or not self._plan_running:
                     return command
         self._finish_plan()
         return move(0, 0, 0)
@@ -584,6 +664,7 @@ def run_simulation(browser_state):
         cleanup.callback(move, 0, 0, 0, duration=0, new_command=True)
         cleanup.callback(save_heading_plot)
         cleanup.callback(dialogue.close)
+        cleanup.callback(sequence.cancel)
         if gui is not None:
             cleanup.callback(gui.close)
             runtime.maps.activate(mj_model, mj_data, args.map)
@@ -611,6 +692,15 @@ def run_simulation(browser_state):
                 sequence.cancel()
                 print("[ACTION] Robot stopped from dashboard.")
 
+            # Refresh detections before control, including missions without a GUI.
+            now = time.monotonic()
+            if now >= next_low_rate_task:
+                if gui is not None:
+                    publish_views()
+                elif sequence.needs_vision:
+                    vision.render_fpv(mj_model, mj_data)
+                next_low_rate_task = time.monotonic() + low_rate_interval
+
             current_heading = heading_deg(mj_data.qpos[3:7])
             heading_change = (current_heading - previous_heading + 180) % 360 - 180
             previous_heading = current_heading
@@ -618,6 +708,8 @@ def run_simulation(browser_state):
                 current_heading,
                 yaw_rate_deg_s=heading_change / simulation_dt,
                 dt=simulation_dt,
+                detections=vision.detections,
+                frame_size=vision.frame_size,
             )
 
             browser_state.set_active_action(sequence.active_index)
@@ -749,15 +841,6 @@ def run_simulation(browser_state):
                       f"grav_z={grav[2]:.3f} "
                       f"act=[{action_isaac.min():.2f},{action_isaac.max():.2f}]")
 
-            # low_rate_task: tasks sharing the configured --low_hz rate.
-            now = time.monotonic()
-            if now >= next_low_rate_task:
-                if gui is not None:
-                    publish_views()
-
-                # Add other low-rate tasks here, outside the GUI condition.
-                # Schedule after completion to avoid catch-up bursts.
-                next_low_rate_task = time.monotonic() + low_rate_interval
             elapsed = time.time() - step_start
             if simulation_dt - elapsed > 0:
                 time.sleep(simulation_dt - elapsed)

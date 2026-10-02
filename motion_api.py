@@ -1,6 +1,7 @@
 """Timed velocity and closed-loop heading commands for the robot control loop."""
 
 import time
+from dataclasses import dataclass
 
 import numpy as np
 
@@ -13,6 +14,18 @@ _turn_target_heading = 0.0
 _turn_log_time = None
 _yaw_integral = 0.0
 _yaw_time = None
+
+
+@dataclass
+class _ObjectMission:
+    object_type: str
+    object_color: str
+    deadline: float
+    phase: str | None = None
+    status: str = "RUNNING"
+
+
+_object_mission: _ObjectMission | None = None
 
 
 def move(
@@ -140,3 +153,165 @@ def turn(
         _yaw_integral = candidate
     wz = pd + ki * _yaw_integral
     return np.array([0.0, 0.0, np.clip(wz, -max_wz, max_wz)], dtype=np.float32)
+
+
+def _normalized_bbox(bbox, frame_size):
+    """Clip a pixel box to the frame and normalize by (width, height)."""
+    size = np.asarray(frame_size, dtype=float)
+    if size.shape != (2,) or not np.isfinite(size).all() or np.any(size <= 0):
+        raise ValueError("frame_size must contain a finite positive width and height")
+    if bbox is None:
+        return None
+    box = np.asarray(bbox, dtype=float)
+    if box.shape != (4,) or not np.isfinite(box).all():
+        raise ValueError("bbox must contain four finite pixel coordinates")
+    box = np.clip(box / np.tile(size, 2), 0, 1)
+    if box[2] <= box[0] or box[3] <= box[1]:
+        raise ValueError("bbox must have positive width and height inside the frame")
+    return box
+
+
+def approach(
+    object_type: str,
+    object_color: str,
+    bbox,
+    *,
+    frame_size=(640, 480),
+    new_command: bool = False,
+) -> np.ndarray:
+    """Steer toward a visible target using its pixel box and (width, height).
+
+    Horizontal error is box-center x / frame width minus 0.5. Positive
+    image error requires a clockwise (negative wz) turn. Forward speed is
+    0.5 m/s when abs(error) < 0.25; yaw rate is -2 * error rad/s.
+    Stop when box height / frame height reaches 0.70. A missing box stops
+    movement; goto_object handles the transition back to search.
+    """
+    box = _normalized_bbox(bbox, frame_size)
+    if new_command:
+        print(f"[APPROACH] object={object_type} color={object_color}")
+    if box is None or box[3] - box[1] >= 0.70:
+        return move(0, 0, 0, duration=0, new_command=True)
+    error = (box[0] + box[2]) / 2 - 0.5
+    vx = 0.5 if abs(error) < 0.25 else 0.0
+    return move(vx, 0, -2.0 * error, new_command=True)
+
+
+def search(
+    current_yaw_deg: float,
+    *,
+    new_command: bool = False,
+    yaw_rate_deg_s: float = 0.0,
+    dt: float | None = None,
+) -> np.ndarray:
+    """Poll a single 360-degree counterclockwise search using turn().
+
+    Set new_command=True on search entry, then poll with updated heading.
+    A zero command signals that the search revolution is complete.
+    """
+    command = turn(
+        360,
+        current_yaw_deg,
+        new_command=new_command,
+        yaw_rate_deg_s=yaw_rate_deg_s,
+        dt=dt,
+    )
+    if new_command:
+        print("[SEARCH]")
+    return command
+
+
+def get_goto_status() -> str | None:
+    """Return RUNNING, SUCCESS, FAIL, or None before the first object mission."""
+    return _object_mission.status if _object_mission is not None else None
+
+
+def cancel_goto_object() -> np.ndarray:
+    """Cancel a running mission and stop its motion from the control thread."""
+    if _object_mission is not None and _object_mission.status == "RUNNING":
+        return _finish_object_mission("FAIL", "cancelled")
+    return move(0, 0, 0, duration=0, new_command=True)
+
+
+def _finish_object_mission(status, reason=None):
+    _object_mission.status = status
+    command = move(0, 0, 0, duration=0, new_command=True)
+    message = f"[MISSION] status={status}"
+    if reason is not None:
+        message += f" reason={reason}"
+    print(message)
+    return command
+
+
+def goto_object(
+    object_type: str,
+    object_color: str,
+    bbox=None,
+    *,
+    current_yaw_deg: float,
+    frame_size=(640, 480),
+    new_command: bool = False,
+    yaw_rate_deg_s: float = 0.0,
+    dt: float | None = None,
+) -> np.ndarray:
+    """Poll a nonblocking search/approach mission with a 60-second timeout.
+
+    object_type is the target COCO class and object_color its requested color.
+    The caller selects a matching vision detection and supplies its current
+    pixel bbox, or None when no matching object is visible. Supply the current
+    yaw in degrees and camera frame_size=(width, height) on each control update.
+    Physics and vision must continue updating between calls on the control
+    thread; this function does not render cameras or block the simulation.
+
+    The first call or a changed target starts a mission. Set new_command=True
+    once to explicitly restart the same target. Terminal calls return zeros
+    without repeating mission logs; get_goto_status() reports the outcome.
+    The deadline is shared across all approach/search transitions.
+    """
+    global _object_mission
+    if not isinstance(object_type, str) or not object_type.strip():
+        raise ValueError("object_type must be a nonempty COCO class name")
+    if not isinstance(object_color, str) or not object_color.strip():
+        raise ValueError("object_color must be nonempty text")
+    if not np.isfinite([current_yaw_deg, yaw_rate_deg_s]).all():
+        raise ValueError("heading and yaw rate must be finite")
+    if dt is not None and (not np.isfinite(dt) or dt <= 0):
+        raise ValueError("dt must be finite and positive")
+    box = _normalized_bbox(bbox, frame_size)
+    now = time.monotonic()
+    if (
+        new_command
+        or _object_mission is None
+        or (_object_mission.object_type, _object_mission.object_color)
+        != (object_type, object_color)
+    ):
+        if _object_mission is not None and _object_mission.status == "RUNNING":
+            _finish_object_mission("FAIL", "replaced by a new mission")
+        _object_mission = _ObjectMission(object_type, object_color, now + 60.0)
+    if _object_mission.status != "RUNNING":
+        return np.zeros(3, dtype=np.float32)
+    if now >= _object_mission.deadline:
+        return _finish_object_mission("FAIL", "60-second timeout")
+    phase = "approach" if box is not None else "search"
+    entering = _object_mission.phase != phase
+    _object_mission.phase = phase
+    if phase == "approach":
+        command = approach(
+            object_type,
+            object_color,
+            bbox,
+            frame_size=frame_size,
+            new_command=entering,
+        )
+        if box[3] - box[1] >= 0.70:
+            return _finish_object_mission("SUCCESS")
+        return command
+    command = search(
+        current_yaw_deg,
+        new_command=entering,
+        yaw_rate_deg_s=yaw_rate_deg_s,
+        dt=dt,
+    )
+    if not np.any(command):
+        return _finish_object_mission("FAIL", "object not found after one revolution")
+    return command
