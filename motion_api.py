@@ -5,6 +5,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
+GOTO_TIMEOUT_SECONDS = 20.0  # Shared wall-clock limit for search and approach.
+
 _velocity = np.zeros(3, dtype=np.float32)
 _deadline = 0.0
 _turn_angle = None
@@ -21,6 +23,7 @@ class _ObjectMission:
     object_type: str
     object_color: str
     deadline: float
+    timeout: float
     phase: str | None = None
     status: str = "RUNNING"
 
@@ -254,7 +257,7 @@ def goto_object(
     yaw_rate_deg_s: float = 0.0,
     dt: float | None = None,
 ) -> np.ndarray:
-    """Poll a nonblocking search/approach mission with a 60-second timeout.
+    """Poll a nonblocking search/approach mission with a configurable timeout.
 
     object_type is the target COCO class and object_color its requested color.
     The caller selects a matching vision detection and supplies its current
@@ -266,7 +269,8 @@ def goto_object(
     The first call or a changed target starts a mission. Set new_command=True
     once to explicitly restart the same target. Terminal calls return zeros
     without repeating mission logs; get_goto_status() reports the outcome.
-    The deadline is shared across all approach/search transitions.
+    GOTO_TIMEOUT_SECONDS sets the deadline when a mission starts; it is shared
+    across all approach/search transitions.
     """
     global _object_mission
     if not isinstance(object_type, str) or not object_type.strip():
@@ -285,13 +289,19 @@ def goto_object(
         or (_object_mission.object_type, _object_mission.object_color)
         != (object_type, object_color)
     ):
+        if not np.isfinite(GOTO_TIMEOUT_SECONDS) or GOTO_TIMEOUT_SECONDS <= 0:
+            raise ValueError("GOTO_TIMEOUT_SECONDS must be finite and positive")
         if _object_mission is not None and _object_mission.status == "RUNNING":
             _finish_object_mission("FAIL", "replaced by a new mission")
-        _object_mission = _ObjectMission(object_type, object_color, now + 60.0)
+        _object_mission = _ObjectMission(
+            object_type, object_color, now + GOTO_TIMEOUT_SECONDS, GOTO_TIMEOUT_SECONDS
+        )
     if _object_mission.status != "RUNNING":
         return np.zeros(3, dtype=np.float32)
     if now >= _object_mission.deadline:
-        return _finish_object_mission("FAIL", "60-second timeout")
+        return _finish_object_mission(
+            "FAIL", f"{_object_mission.timeout:g}-second timeout"
+        )
     phase = "approach" if box is not None else "search"
     entering = _object_mission.phase != phase
     _object_mission.phase = phase

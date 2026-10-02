@@ -104,6 +104,26 @@ class GotoObjectTests(unittest.TestCase):
         self.assertEqual(self.output.getvalue().count("[SEARCH]"), 2)
         self.assertEqual(self.output.getvalue().count("[APPROACH]"), 2)
 
+    def test_configured_timeout_is_captured_at_mission_start(self):
+        with patch.object(motion_api, "GOTO_TIMEOUT_SECONDS", 5.0):
+            self.goto()
+        self.now.return_value = 14.9
+        self.assertGreater(self.goto()[2], 0)
+        self.now.return_value = 15
+        np.testing.assert_array_equal(self.goto(), [0, 0, 0])
+        self.assertEqual(motion_api.get_goto_status(), "FAIL")
+        self.assertIn("reason=5-second timeout", self.output.getvalue())
+
+    def test_invalid_timeout_configuration_is_rejected(self):
+        for timeout in (0, -1, float("nan"), float("inf")):
+            with (
+                self.subTest(timeout=timeout),
+                patch.object(motion_api, "GOTO_TIMEOUT_SECONDS", timeout),
+            ):
+                with self.assertRaises(ValueError):
+                    self.goto()
+                self.assertIsNone(motion_api.get_goto_status())
+
     def test_timeout_is_shared_across_phases_and_stops_once(self):
         self.goto()
         self.now.return_value = 40

@@ -136,7 +136,7 @@ Use object_color="any" if the user does not specify a color. Normalize grey to
 gray and light/dark color descriptions to the supported base color. Reject
 unsupported or ambiguous colors with chat rather than inventing a color.
 goto uses live vision to search one revolution and approach the matched object,
-with a 60-second timeout. It does not accept coordinates or a fabricated bbox.
+with a configured mission timeout. It does not accept coordinates or a fabricated bbox.
 You have no camera images: do not invent current observations or locations.
 Explain with chat if asked to describe the view. Return JSON only.
 Supported COCO classes: """
