@@ -31,6 +31,69 @@ class ActionSequenceTests(unittest.TestCase):
         stdout.__enter__()
         self.addCleanup(stdout.__exit__, None, None, None)
 
+    def lifecycle_logs(self):
+        return [
+            line
+            for line in self.output.getvalue().splitlines()
+            if line.startswith(("[EXEC]", "[DONE]"))
+        ]
+
+    def test_execution_logs_once_per_action_and_done_after_final_motion(self):
+        self.sequence.update(0)
+        self.assertEqual(self.lifecycle_logs(), [])
+        self.sequence.replace(
+            [
+                {"action": "chat", "reply": "Go\nnow"},
+                movement(duration=2),
+                {"action": "turn", "angle": 90},
+            ]
+        )
+        self.sequence.update(0, dt=0.02)
+        self.sequence.update(0, dt=0.02)
+        self.assertEqual(len(self.lifecycle_logs()), 2)
+        self.assertNotIn("[DONE]", self.lifecycle_logs())
+        self.now.return_value = 12
+        self.sequence.update(0, dt=0.02)
+        self.sequence.update(30, dt=0.02)
+        self.assertNotIn("[DONE]", self.lifecycle_logs())
+        self.sequence.update(88, dt=0.02)
+        self.sequence.update(90, dt=0.02)
+        self.assertEqual(
+            self.lifecycle_logs(),
+            [
+                '[EXEC] action=chat reply="Go\\nnow"',
+                '[EXEC] action=move velocity={"vx": 1, "vy": 0, "wz": 0} duration=2',
+                "[EXEC] action=turn angle=90",
+                "[DONE]",
+            ],
+        )
+
+    def test_cancel_and_replacement_do_not_report_completed_plan(self):
+        self.sequence.replace([movement(duration=2)])
+        self.sequence.update(0)
+        self.sequence.cancel()
+        self.sequence.update(0)
+        self.assertNotIn("[DONE]", self.lifecycle_logs())
+        self.sequence.replace([{"action": "turn", "angle": 90}])
+        self.sequence.update(0)
+        self.sequence.replace([{"action": "stop"}])
+        self.sequence.update(0)
+        self.sequence.update(0)
+        self.assertEqual(self.lifecycle_logs().count("[DONE]"), 1)
+        self.assertEqual(self.lifecycle_logs()[-2:], ["[EXEC] action=stop", "[DONE]"])
+
+    def test_immediate_plan_completes_once_and_stop_remainder_is_not_completed(self):
+        self.sequence.replace([movement(duration=0), {"action": "turn", "angle": 0}])
+        self.sequence.update(0)
+        self.sequence.update(0)
+        self.assertEqual(self.lifecycle_logs().count("[DONE]"), 1)
+        self.output.truncate(0)
+        self.output.seek(0)
+        self.sequence.replace([{"action": "stop"}, movement()])
+        self.sequence.update(0)
+        self.sequence.update(0)
+        self.assertEqual(self.lifecycle_logs(), ["[EXEC] action=stop"])
+
     def test_move_then_relative_turn_then_move(self):
         self.sequence.replace(
             [movement(duration=2), {"action": "turn", "angle": 90}, movement(vx=-0.5)]

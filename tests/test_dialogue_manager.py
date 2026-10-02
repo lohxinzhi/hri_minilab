@@ -5,12 +5,15 @@ import os
 import threading
 import time
 import unittest
+from contextlib import redirect_stdout
+from io import StringIO
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from openai import OpenAIError
 
 import dialogue_manager
+from browser_gui import BrowserState
 from dialogue_manager import DialogueManager, validate_actions
 
 
@@ -28,6 +31,59 @@ def completion(actions=None, *, content=None, refusal=None, finish_reason="stop"
 
 
 class DialogueTests(unittest.TestCase):
+    def test_command_outcomes_are_logged_once_to_terminal_and_gui(self):
+        actions = [
+            {"action": "turn", "angle": 90},
+            {
+                "action": "move",
+                "velocity": {"vx": 0.5, "vy": 0, "wz": 0},
+                "duration": 2,
+            },
+            {"action": "chat", "reply": "Moving now."},
+        ]
+        reasons = [
+            "Object navigation is unavailable.",
+            "Which direction?\nPlease clarify.",
+        ]
+        chat_actions = [{"action": "chat", "reply": reason} for reason in reasons]
+        manager, client = self.make_manager()
+        client.chat.completions.create.side_effect = [
+            completion(actions),
+            completion(chat_actions),
+            completion(content='{"actions": [{"action": "jump"}]}'),
+            completion(refusal="refused"),
+            OpenAIError("offline"),
+            completion(),
+        ]
+        for prompt in ("move", "find object", "jump", "refused", "offline", "stop"):
+            manager.submit_prompt(prompt)
+        state = BrowserState()
+        terminal = StringIO()
+        with redirect_stdout(terminal), state.capture_logs():
+            manager.start()
+            try:
+                self.assertEqual(manager._plans.get(timeout=2), actions)
+                self.assertEqual(manager._plans.get(timeout=2), chat_actions)
+                self.assertEqual(manager._plans.get(timeout=2), [{"action": "stop"}])
+            finally:
+                manager.close()
+                manager._thread.join(1)
+        self.assertFalse(manager._thread.is_alive())
+        expected = [
+            f"[CMD] actions={json.dumps(actions)} n=3",
+            f"[CMD] rejected reasons={json.dumps(reasons)}",
+            '[CMD] rejected reasons=["ValueError: unsupported action or invalid action fields"]',
+            '[CMD] rejected reasons=["ValueError: LLM response was incomplete or refused"]',
+            '[CMD] rejected reasons=["OpenAIError: offline"]',
+            '[CMD] actions=[{"action": "stop"}] n=1',
+        ]
+        self.assertEqual(terminal.getvalue().splitlines(), expected)
+        self.assertEqual(
+            "".join(entry["text"] for entry in state.logs).splitlines(), expected
+        )
+        self.assertIsNone(manager.poll_actions())
+        self.assertEqual(manager.chat_snapshot()[-1]["status"], "planned")
+
     def make_manager(self):
         client = Mock()
         client.chat.completions.create.return_value = completion()

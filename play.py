@@ -7,6 +7,7 @@ Joint order:
   → The rear legs are swapped! RL/RR remapping is required!
 
 """
+import json
 import time
 from pathlib import Path
 import sys
@@ -175,8 +176,10 @@ class RobotActionSequence:
         self.active_index = None
         self.next_index = None
         self.turn_angle = None
+        self._plan_running = False
 
     def cancel(self):
+        self._plan_running = False
         self.pending.clear()
         self.active = None
         self.active_index = None
@@ -189,6 +192,12 @@ class RobotActionSequence:
         self.cancel()
         self.pending.extend(actions)
         self.next_index = history_start
+        self._plan_running = True
+
+    def _finish_plan(self):
+        if self._plan_running:
+            self._plan_running = False
+            print("[DONE]")
 
     def update(self, current_heading, yaw_rate_deg_s=0.0, dt=None):
         options = {"yaw_rate_deg_s": yaw_rate_deg_s, "dt": dt}
@@ -212,10 +221,18 @@ class RobotActionSequence:
             if self.next_index is not None:
                 self.next_index += 1
             kind = action["action"]
+            parameters = " ".join(
+                f"{key}={json.dumps(value, ensure_ascii=False)}"
+                for key, value in action.items()
+                if key != "action"
+            )
+            print(f"[EXEC] action={kind}" + (f" {parameters}" if parameters else ""))
             if kind == "chat":
                 print(f"[DIALOGUE] {action['reply']}")
                 continue
             if kind == "stop":
+                if not self.pending:
+                    self._finish_plan()
                 return self.cancel()
             if kind == "move":
                 velocity = action["velocity"]
@@ -235,6 +252,7 @@ class RobotActionSequence:
                     self.active = "turn"
                     self.active_index = action_index
                     return command
+        self._finish_plan()
         return move(0, 0, 0)
 
 

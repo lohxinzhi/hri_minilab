@@ -311,6 +311,9 @@ class DialogueManager:
                 except (OpenAIError, ValueError, TypeError, IndexError) as exc:
                     if not self._stop.is_set():
                         error = f"{type(exc).__name__}: {exc}"
+                        print(
+                            f"[CMD] rejected reasons={json.dumps([error], ensure_ascii=False)}"
+                        )
                         self._errors.put(error)
                         self._reply(
                             request_id,
@@ -320,6 +323,16 @@ class DialogueManager:
                         )
                     continue
                 if not self._stop.is_set():
+                    if all(action["action"] == "chat" for action in actions):
+                        reasons = [action["reply"] for action in actions]
+                        print(
+                            f"[CMD] rejected reasons={json.dumps(reasons, ensure_ascii=False)}"
+                        )
+                    else:
+                        print(
+                            f"[CMD] actions={json.dumps(actions, ensure_ascii=False)} "
+                            f"n={len(actions)}"
+                        )
                     self._reply(
                         request_id,
                         self._summarize(actions),
