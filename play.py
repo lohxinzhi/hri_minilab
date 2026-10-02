@@ -35,7 +35,7 @@ from motion_api import (
     turn,
 )
 from plot import plot_heading
-from vision_module import VisionModule
+from vision_module import DEFAULT_VISION_MODEL, VisionModule
 
 # All in-repo resources are located relative to this file, so running does not
 # depend on the current working directory or machine-specific absolute paths.
@@ -670,6 +670,11 @@ def run_simulation(browser_state):
     )
     parser.add_argument("--gui-port", type=int, default=8765, help="robot dashboard port")
     parser.add_argument(
+        "--vision-model",
+        default=DEFAULT_VISION_MODEL,
+        help="YOLO model name or weights path (default: yolov8n.pt)",
+    )
+    parser.add_argument(
         "--vision-confidence",
         type=float,
         default=0.5,
@@ -811,7 +816,9 @@ def run_simulation(browser_state):
     print(f"[INFO] warm-up done, norm={np.linalg.norm(obs_history.buffer):.4f}")
     display = scene.viewer(True)
     dialogue = DialogueManager()
-    vision = VisionModule(confidence_threshold=args.vision_confidence)
+    vision = VisionModule(
+        model=args.vision_model, confidence_threshold=args.vision_confidence
+    )
 
     def describe_current_view(action, request_id):
         # MuJoCo rendering stays on the simulation thread. Cloud inference

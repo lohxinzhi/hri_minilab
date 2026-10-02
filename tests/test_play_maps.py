@@ -116,6 +116,37 @@ class PlayMapTests(unittest.TestCase):
             )
         )
 
+    def test_vision_model_launch_argument_reaches_detector(self):
+        for options, expected in (
+            ([], "yolov8n.pt"),
+            (["--vision-model", "yolov8s.pt"], "yolov8s.pt"),
+            (["--vision-model", "/tmp/custom weights.pt"], "/tmp/custom weights.pt"),
+        ):
+            with (
+                self.subTest(model=expected),
+                patch.object(play, "VisionModule") as constructor,
+                patch.object(play, "plot_heading"),
+                patch.object(
+                    play.sys,
+                    "argv",
+                    [
+                        "play.py",
+                        "--headless",
+                        "--no-policy",
+                        "--duration",
+                        "0.02",
+                        "--vision-confidence",
+                        "0.65",
+                        *options,
+                    ],
+                ),
+                redirect_stdout(StringIO()),
+            ):
+                play.main()
+                constructor.assert_called_once_with(
+                    model=expected, confidence_threshold=0.65
+                )
+
     def test_invalid_low_rates_are_rejected_before_scene_creation(self):
         for rate in ("0", "-1", "nan", "inf"):
             with (

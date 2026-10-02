@@ -1,4 +1,4 @@
-"""Detect objects with YOLOv8 and describe FPV frames with a separate VLM."""
+"""Detect objects with YOLO and describe FPV frames with a separate VLM."""
 
 import base64
 import json
@@ -14,6 +14,8 @@ from openai import OpenAI, OpenAIError
 from ultralytics import YOLO
 
 from llm_cost import configured_rates, estimate_cost
+
+DEFAULT_VISION_MODEL = "yolov8n.pt"
 
 SCENE_DESCRIPTION_PROMPT = (
     "You are the visual perception system of an indoor mobile robot. "
@@ -49,7 +51,7 @@ class VisionModule:
 
     def __init__(
         self,
-        model: str = "yolov8n.pt",
+        model: str = DEFAULT_VISION_MODEL,
         *,
         confidence_threshold: float = 0.5,
         vlm_client=None,

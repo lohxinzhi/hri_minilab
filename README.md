@@ -171,6 +171,14 @@ The dashboard opens automatically at `http://127.0.0.1:8765`. Open that URL
 manually if automatic browser launch is unavailable. Use `--gui-port 8766` for
 a different port. The server listens only on the local machine.
 
+The detector defaults to YOLOv8 nano (`yolov8n.pt`). Select another YOLO model
+or a custom weights path with `--vision-model`:
+
+```bash
+python play.py --map coco_scene --gui --vision-model yolov8s.pt
+python play.py --map coco_scene --gui --vision-model /path/to/custom_weights.pt
+```
+
 The FPV feed labels all detected COCO classes with confidence strictly above
 50%. Use `--vision-confidence 0.65` to change the threshold (range 0 to 1), or
 pass `confidence_threshold=0.65` to `VisionModule` in Python. Labels include
