@@ -1,12 +1,15 @@
 """Local robot dashboard: camera streams, chat and captured Python console logs."""
 
+import csv
 import json
 import sys
 import threading
 import webbrowser
 from collections import deque
 from contextlib import contextmanager
+from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from io import StringIO
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -112,7 +115,9 @@ class BrowserGUI:
             def log_message(self, *_args):
                 pass  # Poll and streaming requests should not fill console logs.
 
-            def _response(self, status, payload, content_type="application/json"):
+            def _response(
+                self, status, payload, content_type="application/json", filename=None
+            ):
                 data = (
                     json.dumps(payload).encode()
                     if content_type == "application/json"
@@ -121,6 +126,10 @@ class BrowserGUI:
                 self.send_response(status)
                 self.send_header("Content-Type", content_type)
                 self.send_header("Content-Length", str(len(data)))
+                if filename is not None:
+                    self.send_header(
+                        "Content-Disposition", f'attachment; filename="{filename}"'
+                    )
                 self.send_header("Cache-Control", "no-store")
                 self.end_headers()
                 self.wfile.write(data)
@@ -131,6 +140,28 @@ class BrowserGUI:
                     if path == "/":
                         self._response(
                             200, PAGE.read_bytes(), "text/html; charset=utf-8"
+                        )
+                    elif path == "/api/export":
+                        output = StringIO(newline="")
+                        writer = csv.writer(output)
+                        writer.writerow(["role", "text", "action"])
+                        for row in gui.dialogue.export_snapshot():
+                            writer.writerow(
+                                [
+                                    row["role"],
+                                    row["text"],
+                                    json.dumps(row["action"], ensure_ascii=False)
+                                    if row["action"] is not None
+                                    else "",
+                                ]
+                            )
+                        self._response(
+                            200,
+                            output.getvalue().encode("utf-8"),
+                            "text/csv; charset=utf-8",
+                            filename=datetime.now(UTC).strftime(
+                                "robot_chat_%Y%m%d_%H%M%S.csv"
+                            ),
                         )
                     elif path == "/api/state":
                         payload = gui.state.snapshot()

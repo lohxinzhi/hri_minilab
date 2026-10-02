@@ -204,6 +204,9 @@ The page shows the configured LLM model and contains:
   generated since simulation startup, with one JSON line per action and all
   action properties. The currently executing action is highlighted; the highlight
   clears when motion completes or is cancelled. Chat reply text is excluded.
+- An **Export Chat** button downloads chat history and generated plans with
+  `role`, `text`, and `action` columns. Each assistant row contains its full plan
+  as JSON; user rows have an empty action field. Export before ending the simulation.
 - A top-right **End simulation** button that exits and saves the heading plot.
 - A **Stop robot** button that cancels the current motion and remaining actions.
 

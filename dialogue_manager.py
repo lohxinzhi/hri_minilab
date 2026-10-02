@@ -133,6 +133,7 @@ class DialogueManager:
         self._chat = []
         self._generated_actions = []
         self._plan_offsets = {}
+        self._export_actions = {}
         self._next_id = 1
 
     def submit_prompt(self, prompt):
@@ -162,6 +163,20 @@ class DialogueManager:
         with self._chat_lock:
             return deepcopy(self._chat)
 
+    def export_snapshot(self):
+        """Copy chat and the full generated plan for each assistant reply."""
+        with self._chat_lock:
+            return [
+                {
+                    "role": message["role"],
+                    "text": message["content"],
+                    "action": deepcopy(self._export_actions.get(message["id"], []))
+                    if message["role"] == "assistant"
+                    else None,
+                }
+                for message in self._chat
+            ]
+
     def action_history_start(self, actions):
         """Consume the history offset associated with a queued plan."""
         with self._chat_lock:
@@ -175,6 +190,7 @@ class DialogueManager:
     def _reply(self, request_id, content, status, actions=None):
         with self._chat_lock:
             if actions is not None:
+                self._export_actions[request_id] = deepcopy(actions)
                 self._plan_offsets[id(actions)] = len(self._generated_actions)
                 self._generated_actions.extend(
                     deepcopy(

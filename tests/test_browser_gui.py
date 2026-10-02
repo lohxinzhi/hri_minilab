@@ -1,5 +1,6 @@
 """Exercise dashboard HTTP, video, chat and captured logs without a real API."""
 
+import csv
 import json
 import unittest
 from io import StringIO
@@ -138,6 +139,37 @@ class BrowserTests(unittest.TestCase):
             snapshot = json.load(response)
         self.assertFalse(snapshot["running"])
         self.assertIsNone(snapshot["active_action"])
+
+    def test_csv_export_preserves_chat_and_all_generated_plans(self):
+        prompt = 'Move, then say "hello"\n你好'
+        request_id = self.dialogue.submit_prompt(prompt)
+        actions = [
+            {"action": "move", "velocity": {"vx": 1, "vy": 0, "wz": 0}, "duration": 2},
+            {"action": "chat", "reply": "Hello, robot"},
+        ]
+        self.dialogue._reply(request_id, "Starting, now\nHello", "planned", actions)
+        second_id = self.dialogue.submit_prompt("stop")
+        self.dialogue._reply(second_id, "Stopped", "planned", [{"action": "stop"}])
+        with self.request("/api/export") as response:
+            self.assertEqual(response.headers.get_content_type(), "text/csv")
+            self.assertIn(
+                "attachment; filename=", response.headers["Content-Disposition"]
+            )
+            reader = csv.DictReader(StringIO(response.read().decode("utf-8")))
+            self.assertEqual(reader.fieldnames, ["role", "text", "action"])
+            rows = list(reader)
+        self.assertEqual(
+            [row["role"] for row in rows], ["user", "assistant", "user", "assistant"]
+        )
+        self.assertEqual(rows[0], {"role": "user", "text": prompt, "action": ""})
+        self.assertEqual(rows[1]["text"], "Starting, now\nHello")
+        self.assertEqual(json.loads(rows[1]["action"]), actions)
+        self.assertEqual(rows[2]["action"], "")
+        self.assertEqual(json.loads(rows[3]["action"]), [{"action": "stop"}])
+
+    def test_empty_csv_export_has_headers(self):
+        with self.request("/api/export") as response:
+            self.assertEqual(response.read().decode(), "role,text,action\r\n")
 
     def test_logs_are_bounded(self):
         for i in range(2500):
