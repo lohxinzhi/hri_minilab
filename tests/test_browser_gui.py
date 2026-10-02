@@ -147,7 +147,13 @@ class BrowserTests(unittest.TestCase):
             {"action": "move", "velocity": {"vx": 1, "vy": 0, "wz": 0}, "duration": 2},
             {"action": "chat", "reply": "Hello, robot"},
         ]
-        self.dialogue._reply(request_id, "Starting, now\nHello", "planned", actions)
+        self.dialogue._reply(
+            request_id,
+            "Starting, now\nHello",
+            "planned",
+            actions,
+            estimated_cost=0.000123,
+        )
         second_id = self.dialogue.submit_prompt("stop")
         self.dialogue._reply(second_id, "Stopped", "planned", [{"action": "stop"}])
         with self.request("/api/export") as response:
@@ -156,12 +162,24 @@ class BrowserTests(unittest.TestCase):
                 "attachment; filename=", response.headers["Content-Disposition"]
             )
             reader = csv.DictReader(StringIO(response.read().decode("utf-8")))
-            self.assertEqual(reader.fieldnames, ["role", "text", "action"])
+            self.assertEqual(
+                reader.fieldnames, ["role", "text", "action", "estimated_api_cost_usd"]
+            )
             rows = list(reader)
         self.assertEqual(
             [row["role"] for row in rows], ["user", "assistant", "user", "assistant"]
         )
-        self.assertEqual(rows[0], {"role": "user", "text": prompt, "action": ""})
+        self.assertEqual(
+            rows[0],
+            {
+                "role": "user",
+                "text": prompt,
+                "action": "",
+                "estimated_api_cost_usd": "",
+            },
+        )
+        self.assertEqual(rows[1]["estimated_api_cost_usd"], "0.0001230000")
+        self.assertEqual(rows[3]["estimated_api_cost_usd"], "")
         self.assertEqual(rows[1]["text"], "Starting, now\nHello")
         self.assertEqual(json.loads(rows[1]["action"]), actions)
         self.assertEqual(rows[2]["action"], "")
@@ -169,7 +187,9 @@ class BrowserTests(unittest.TestCase):
 
     def test_empty_csv_export_has_headers(self):
         with self.request("/api/export") as response:
-            self.assertEqual(response.read().decode(), "role,text,action\r\n")
+            self.assertEqual(
+                response.read().decode(), "role,text,action,estimated_api_cost_usd\r\n"
+            )
 
     def test_logs_are_bounded(self):
         for i in range(2500):

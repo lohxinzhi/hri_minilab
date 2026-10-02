@@ -205,8 +205,10 @@ The page shows the configured LLM model and contains:
   action properties. The currently executing action is highlighted; the highlight
   clears when motion completes or is cancelled. Chat reply text is excluded.
 - An **Export Chat** button downloads chat history and generated plans with
-  `role`, `text`, and `action` columns. Each assistant row contains its full plan
-  as JSON; user rows have an empty action field. Export before ending the simulation.
+  `role`, `text`, `action`, and `estimated_api_cost_usd` columns. Each assistant row contains its full plan
+  as JSON and an estimated per-call cost in USD; user rows have empty action and
+  cost fields. Costs are exported only, not displayed in the GUI. Export before
+  ending the simulation.
 - A top-right **End simulation** button that exits and saves the heading plot.
 - A **Stop robot** button that cancels the current motion and remaining actions.
 
@@ -262,6 +264,30 @@ Run offline tests:
 ```bash
 python -m unittest discover -s tests -v
 ```
+
+### Exported API cost estimates
+
+Costs use the API response's prompt/completion token counts, including conversation
+history and reasoning tokens. Cached input and cache-write counts are used when
+reported. Estimates are attached to assistant rows, including rejected or malformed
+responses when usage is available. User rows and calls with unknown usage/pricing
+have blank cost fields; a blank is not a zero-cost call.
+
+The built-in GPT-6 Luna estimate uses standard USD rates recorded on 2026-10-02:
+$0.10 input, $0.01 cached input, $0.125 cache writes and $0.50 output per million
+tokens, with the published long-context multipliers above 272,000 prompt tokens.
+Sources: [GPT-6 Luna model documentation](https://developers.openai.com/api/docs/models/gpt-6-luna)
+and [OpenAI pricing](https://developers.openai.com/api/docs/pricing).
+This is a token-based estimate, not an invoice; taxes, regional premiums, tool
+fees and account discounts are excluded. Nonstandard service tiers, other models
+and custom base URLs require explicit pricing rather than guessed rates.
+
+For custom pricing, set both `LLM_INPUT_USD_PER_MILLION` and
+`LLM_OUTPUT_USD_PER_MILLION`. Optional `LLM_CACHED_INPUT_USD_PER_MILLION` and
+`LLM_CACHE_WRITE_USD_PER_MILLION` default to the custom input rate when omitted.
+Custom rates are applied directly without automatic long-context multipliers;
+configure them for your provider's applicable rate. All rates must be finite and
+non-negative. No additional Python packages are needed.
 
 ## License
 

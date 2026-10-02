@@ -9,6 +9,8 @@ from queue import Empty, Queue
 
 from openai import OpenAI, OpenAIError
 
+from llm_cost import configured_rates, estimate_cost
+
 SYSTEM_PROMPT = """You are the dialogue manager of a robot dog in MuJoCo.
 Convert the latest request into a JSON object containing an ordered actions list.
 Only generate the actions needed for this request; do not repeat earlier plans.
@@ -121,6 +123,8 @@ class DialogueManager:
     def __init__(self, model=None, *, client=None):
         self.history = [{"role": "system", "content": SYSTEM_PROMPT}]
         self.model = model or os.environ.get("OPENAI_MODEL", "gpt-6-luna")
+        self.pricing = configured_rates(self.model)
+        self._last_api_cost = None
         self.client = client
         self._owns_client = client is None
         self._history_lock = threading.Lock()
@@ -134,6 +138,7 @@ class DialogueManager:
         self._generated_actions = []
         self._plan_offsets = {}
         self._export_actions = {}
+        self._export_costs = {}
         self._next_id = 1
 
     def submit_prompt(self, prompt):
@@ -170,6 +175,9 @@ class DialogueManager:
                 {
                     "role": message["role"],
                     "text": message["content"],
+                    "estimated_api_cost_usd": self._export_costs.get(message["id"])
+                    if message["role"] == "assistant"
+                    else None,
                     "action": deepcopy(self._export_actions.get(message["id"], []))
                     if message["role"] == "assistant"
                     else None,
@@ -187,8 +195,9 @@ class DialogueManager:
         with self._chat_lock:
             return deepcopy(self._generated_actions)
 
-    def _reply(self, request_id, content, status, actions=None):
+    def _reply(self, request_id, content, status, actions=None, estimated_cost=None):
         with self._chat_lock:
+            self._export_costs[request_id] = estimated_cost
             if actions is not None:
                 self._export_actions[request_id] = deepcopy(actions)
                 self._plan_offsets[id(actions)] = len(self._generated_actions)
@@ -243,6 +252,7 @@ class DialogueManager:
         if not isinstance(user_prompt, str) or not user_prompt.strip():
             raise ValueError("user prompt must be nonempty text")
         with self._history_lock:
+            self._last_api_cost = None
             self.history.append({"role": "user", "content": user_prompt.strip()})
             if self.client is None:
                 self.client = OpenAI(timeout=30.0, max_retries=0)
@@ -258,6 +268,7 @@ class DialogueManager:
                     },
                 },
             )
+            self._last_api_cost = estimate_cost(completion, self.pricing)
             choice = completion.choices[0]
             if choice.finish_reason != "stop" or choice.message.refusal:
                 raise ValueError("LLM response was incomplete or refused")
@@ -301,11 +312,20 @@ class DialogueManager:
                     if not self._stop.is_set():
                         error = f"{type(exc).__name__}: {exc}"
                         self._errors.put(error)
-                        self._reply(request_id, error, "error")
+                        self._reply(
+                            request_id,
+                            error,
+                            "error",
+                            estimated_cost=self._last_api_cost,
+                        )
                     continue
                 if not self._stop.is_set():
                     self._reply(
-                        request_id, self._summarize(actions), "planned", actions=actions
+                        request_id,
+                        self._summarize(actions),
+                        "planned",
+                        actions=actions,
+                        estimated_cost=self._last_api_cost,
                     )
                     self._plans.put(actions)
         finally:

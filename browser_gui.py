@@ -144,7 +144,9 @@ class BrowserGUI:
                     elif path == "/api/export":
                         output = StringIO(newline="")
                         writer = csv.writer(output)
-                        writer.writerow(["role", "text", "action"])
+                        writer.writerow(
+                            ["role", "text", "action", "estimated_api_cost_usd"]
+                        )
                         for row in gui.dialogue.export_snapshot():
                             writer.writerow(
                                 [
@@ -152,6 +154,9 @@ class BrowserGUI:
                                     row["text"],
                                     json.dumps(row["action"], ensure_ascii=False)
                                     if row["action"] is not None
+                                    else "",
+                                    f"{row['estimated_api_cost_usd']:.10f}"
+                                    if row["estimated_api_cost_usd"] is not None
                                     else "",
                                 ]
                             )
