@@ -3,6 +3,7 @@
 import unittest
 from contextlib import redirect_stdout
 from io import StringIO
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
@@ -116,6 +117,54 @@ class GetBboxTests(unittest.TestCase):
 
 
 class ObjectColorTests(unittest.TestCase):
+    def test_birch_floor_is_excluded_from_all_hsv_medians(self):
+        for name, object_hsv in (
+            ("red", (0, 255, 255)),
+            ("orange", (15, 255, 255)),
+            ("brown", (15, 255, 120)),
+            ("yellow", (30, 255, 255)),
+            ("blue", (120, 255, 255)),
+            ("white", (0, 0, 255)),
+            ("black", (0, 0, 0)),
+        ):
+            for brightness in (100, 180, 240):
+                with self.subTest(name=name, brightness=brightness):
+                    hsv = np.full((10, 10, 3), (17, 75, brightness), dtype=np.uint8)
+                    hsv[4:6, 4:6] = object_hsv
+                    frame = vision_module.cv2.cvtColor(
+                        hsv, vision_module.cv2.COLOR_HSV2BGR
+                    )
+                    actual_name, bgr = vision_module.VisionModule._object_color(
+                        frame, [0, 0, 10, 10]
+                    )
+                    self.assertEqual(actual_name, name)
+                    np.testing.assert_allclose(bgr, frame[4, 4], atol=1)
+
+    def test_real_birch_texture_does_not_dominate_small_object(self):
+        path = Path(__file__).resolve().parents[1] / "map" / "meshes" / "birch_wood.png"
+        texture = vision_module.cv2.imread(str(path))
+        self.assertIsNotNone(texture)
+        frame = vision_module.cv2.resize(texture, (64, 64))
+        frame[28:36, 28:36] = (255, 0, 0)
+        self.assertEqual(
+            vision_module.VisionModule._object_color(frame, [0, 0, 64, 64]),
+            ("blue", (255, 0, 0)),
+        )
+
+    def test_both_background_ranges_are_filtered_and_empty_result_is_unknown(self):
+        hsv = np.full((10, 10, 3), (17, 75, 226), dtype=np.uint8)
+        hsv[:5] = (115, 200, 80)
+        frame = vision_module.cv2.cvtColor(hsv, vision_module.cv2.COLOR_HSV2BGR)
+        self.assertEqual(
+            vision_module.VisionModule._object_color(frame, [0, 0, 10, 10]),
+            ("unknown", (128, 128, 128)),
+        )
+        frame[4:6, 4:6] = (0, 0, 255)
+        self.assertEqual(
+            vision_module.VisionModule._object_color(frame, [0, 0, 10, 10]),
+            ("red", (0, 0, 255)),
+        )
+
     def test_dark_blue_background_is_excluded_from_all_hsv_medians(self):
         for name, object_hsv in (
             ("red", (0, 255, 255)),

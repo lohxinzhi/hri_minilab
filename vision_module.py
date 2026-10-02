@@ -13,6 +13,10 @@ class VisionModule:
     # background exclusion to dark blues so brighter blue objects remain.
     DARK_BLUE_HSV_LOWER = (100, 40, 0)
     DARK_BLUE_HSV_UPPER = (130, 255, 120)
+    # Birch texture is predominantly H=17, S=75. Allow lighting variation,
+    # while retaining saturated orange/yellow objects and neutral pixels.
+    BIRCH_HSV_LOWER = (12, 25, 80)
+    BIRCH_HSV_UPPER = (25, 160, 255)
 
     def __init__(
         self, model: str = "yolov8n.pt", *, confidence_threshold: float = 0.5
@@ -107,7 +111,7 @@ class VisionModule:
     def _object_color(frame: np.ndarray, bbox) -> tuple[str, tuple[int, int, int]]:
         """Estimate color from median HSV inside a clipped BGR bounding box.
 
-        Exclude dark-blue background pixels before taking any HSV medians.
+        Exclude dark-blue and pale birch background pixels before HSV medians.
         Low saturation/value identify neutral colors, whose hue alone is not
         meaningful. Return unknown when no usable pixels remain.
         """
@@ -125,6 +129,10 @@ class VisionModule:
         background = cv2.inRange(
             hsv, VisionModule.DARK_BLUE_HSV_LOWER, VisionModule.DARK_BLUE_HSV_UPPER
         )
+        birch = cv2.inRange(
+            hsv, VisionModule.BIRCH_HSV_LOWER, VisionModule.BIRCH_HSV_UPPER
+        )
+        background = cv2.bitwise_or(background, birch)
         hsv = hsv[background == 0]
         if hsv.size == 0:
             return "unknown", (128, 128, 128)
