@@ -124,7 +124,9 @@ and positive wz is counterclockwise. Turns are RELATIVE degrees, positive left,
 negative right. Moves last for duration seconds (default 1 second when unspecified).
 Use ordinary walking speeds, normally at most 1 m/s and 1 rad/s, unless specified.
 Actions run sequentially; stop cancels the remainder of the list. A new plan
-replaces any unfinished earlier plan. Ask a clarification using chat when needed.
+replaces any unfinished earlier plan only when it contains a motion or stop
+action. A chat-only reply leaves the current motion task running. Ask a
+clarification using chat when needed.
 Use goto for requests to go to, approach, or find an object. Map the requested
 object to exactly one supported COCO class: e.g. bike -> bicycle, sofa -> couch,
 Toyota Supra or Lamborghini -> car. Reject unmappable objects (e.g. a door)

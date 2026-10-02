@@ -212,6 +212,19 @@ class RobotActionSequence:
 
     def replace(self, actions, history_start=None, request_id=None):
         actions = validate_actions(actions)
+        if all(action["action"] == "chat" for action in actions):
+            # Complete this reply independently of the executing motion plan.
+            if self.on_status is not None and request_id is not None:
+                self.on_status(request_id, "executing")
+            for action in actions:
+                print(
+                    f"[EXEC] action=chat reply={json.dumps(action['reply'], ensure_ascii=False)}"
+                )
+                print(f"[DIALOGUE] {action['reply']}")
+            if self.on_status is not None and request_id is not None:
+                self.on_status(request_id, "completed")
+            print("[DONE]")
+            return
         self.cancel()
         self.pending.extend(actions)
         self.next_index = history_start
@@ -696,7 +709,7 @@ def run_simulation(browser_state):
             step_start = time.time()
 
             # Poll completed dialogue plans without waiting for console or API I/O.
-            # If multiple replies arrived, the latest plan overrides previous work.
+            # Motion plans replace previous work; chat-only replies leave it running.
             while (actions := dialogue.poll_actions()) is not None:
                 sequence.replace(
                     actions, dialogue.action_history_start(actions),

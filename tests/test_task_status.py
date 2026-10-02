@@ -5,6 +5,8 @@ from contextlib import redirect_stdout
 from io import StringIO
 from unittest.mock import Mock, patch
 
+import numpy as np
+
 import motion_api
 import play
 from dialogue_manager import DialogueManager
@@ -111,6 +113,58 @@ class TaskStatusTests(unittest.TestCase):
         self.assertEqual(self.statuses(request), ["completed", "completed"])
         with self.assertRaises(ValueError):
             self.manager.update_task_status(request, "unknown")
+
+    def test_chat_reply_preserves_move_deadline_pending_actions_and_status(self):
+        task = self.plan(
+            [
+                {
+                    "action": "move",
+                    "velocity": {"vx": 0.5, "vy": 0, "wz": 0},
+                    "duration": 2,
+                },
+                {"action": "turn", "angle": 90},
+            ]
+        )
+        self.sequence.update(0)
+        index = self.sequence.active_index
+        self.now.return_value = 11
+        reply = self.plan([{"action": "chat", "reply": "Still walking."}])
+        self.assertEqual(self.statuses(task), ["executing", "executing"])
+        self.assertEqual(self.statuses(reply), ["completed", "completed"])
+        self.assertEqual(self.sequence.active, "move")
+        self.assertEqual(self.sequence.active_index, index)
+        self.assertEqual(self.sequence.request_id, task)
+        np.testing.assert_array_equal(self.sequence.update(0), [0.5, 0, 0])
+        self.now.return_value = 12
+        self.assertGreater(self.sequence.update(0)[2], 0)
+        self.sequence.update(88)
+        self.assertEqual(self.statuses(task), ["completed", "completed"])
+
+    def test_chat_reply_preserves_turn_target(self):
+        task = self.plan([{"action": "turn", "angle": 90}])
+        self.sequence.update(30)
+        reply = self.plan([{"action": "chat", "reply": "Turning left."}])
+        self.assertEqual(motion_api.get_turn_target_heading(), 120)
+        self.assertEqual(self.sequence.active, "turn")
+        self.assertGreater(self.sequence.update(60)[2], 0)
+        self.sequence.update(118)
+        self.assertEqual(self.statuses(task), ["completed", "completed"])
+        self.assertEqual(self.statuses(reply), ["completed", "completed"])
+
+    def test_chat_reply_preserves_goto_mission_and_timeout(self):
+        task = self.plan(
+            [{"action": "goto", "object_type": "chair", "object_color": "red"}]
+        )
+        self.sequence.update(0)
+        self.now.return_value = 50
+        reply = self.plan([{"action": "chat", "reply": "Searching for the chair."}])
+        self.assertEqual(motion_api.get_goto_status(), "RUNNING")
+        self.assertEqual(self.sequence.active, "goto")
+        self.assertEqual(self.statuses(task), ["executing", "executing"])
+        self.now.return_value = 70
+        self.sequence.update(0)
+        self.assertEqual(self.statuses(task), ["failed", "failed"])
+        self.assertEqual(self.statuses(reply), ["completed", "completed"])
 
 
 if __name__ == "__main__":
