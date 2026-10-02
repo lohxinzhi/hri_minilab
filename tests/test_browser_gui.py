@@ -72,13 +72,16 @@ class BrowserTests(unittest.TestCase):
                 self.dialogue.update_task_status(request_id, status)
                 with self.request("/api/state") as response:
                     messages = json.load(response)["messages"]
+                expected_count = 3 if status == "completed" else 2
                 self.assertEqual(
-                    [item["status"] for item in messages], [status, status]
+                    [item["status"] for item in messages], [status] * expected_count
                 )
                 self.assertEqual(
-                    [item["id"] for item in messages], [request_id, request_id]
+                    [item["id"] for item in messages], [request_id] * expected_count
                 )
                 self.assertEqual(messages[0]["content"], "stop")
+                if status == "completed":
+                    self.assertEqual(messages[-1]["content"], "Successfully stopped.")
 
     def test_camera_mjpeg_contains_encoded_frame(self):
         frame = np.full((16, 24, 3), [10, 20, 200], dtype=np.uint8)

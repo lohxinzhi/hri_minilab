@@ -42,7 +42,7 @@ class TaskStatusTests(unittest.TestCase):
         return [
             item["status"]
             for item in self.manager.chat_snapshot()
-            if item["id"] == request_id
+            if item["id"] == request_id and item.get("kind") != "task_result"
         ]
 
     def test_complete_only_after_all_moves_and_turns_finish(self):
@@ -107,7 +107,11 @@ class TaskStatusTests(unittest.TestCase):
         request = self.plan([{"action": "stop"}])
         before = self.manager.export_snapshot()
         self.sequence.update(0)
-        self.assertEqual(before, self.manager.export_snapshot())
+        after = self.manager.export_snapshot()
+        self.assertEqual(before, after[:2])
+        self.assertEqual(after[-1]["text"], "Successfully stopped.")
+        self.assertEqual(after[-1]["action"], [])
+        self.assertIsNone(after[-1]["estimated_api_cost_usd"])
         self.assertEqual(self.statuses(request), ["completed", "completed"])
         self.manager.update_task_status(request, "executing")
         self.assertEqual(self.statuses(request), ["completed", "completed"])
@@ -165,6 +169,89 @@ class TaskStatusTests(unittest.TestCase):
         self.sequence.update(0)
         self.assertEqual(self.statuses(task), ["failed", "failed"])
         self.assertEqual(self.statuses(reply), ["completed", "completed"])
+
+    def results(self, request_id):
+        return [
+            item["content"]
+            for item in self.manager.chat_snapshot()
+            if item["id"] == request_id and item.get("kind") == "task_result"
+        ]
+
+    def test_right_turn_completion_adds_one_natural_language_reply(self):
+        task = self.plan([{"action": "turn", "angle": -84}])
+        self.sequence.update(0)
+        self.assertEqual(self.results(task), [])
+        self.sequence.update(-83)
+        self.assertEqual(
+            self.results(task), ["Successfully turned 84 degrees to the right."]
+        )
+        self.sequence.update(-84)
+        self.sequence.cancel()
+        self.assertEqual(len(self.results(task)), 1)
+
+    def test_failed_search_reports_target_and_reason(self):
+        task = self.plan(
+            [{"action": "goto", "object_type": "car", "object_color": "blue"}]
+        )
+        for heading in (0, 90, 180, -90, 0):
+            self.sequence.update(heading)
+        self.assertEqual(
+            self.results(task), ["Failed to find the blue car after a full search."]
+        )
+
+    def test_timeout_reply_includes_configured_duration(self):
+        with patch.object(motion_api, "GOTO_TIMEOUT_SECONDS", 5):
+            task = self.plan(
+                [{"action": "goto", "object_type": "car", "object_color": "blue"}]
+            )
+            self.sequence.update(0)
+            self.now.return_value = 15
+            self.sequence.update(0)
+        self.assertEqual(
+            self.results(task),
+            ["Failed to find or approach the blue car: timed out after 5 seconds."],
+        )
+
+    def test_missing_map_position_is_explained(self):
+        task = self.plan(
+            [{"action": "goto", "object_type": "person", "object_color": "any"}]
+        )
+        self.sequence.update(0)
+        self.assertEqual(
+            self.results(task),
+            ["Failed to approach the person: its position is unavailable in this map."],
+        )
+
+    def test_multi_action_success_waits_for_full_plan_and_skips_chat(self):
+        task = self.plan(
+            [
+                {"action": "chat", "reply": "Turning now."},
+                {"action": "turn", "angle": 84},
+                {"action": "stop"},
+            ]
+        )
+        self.sequence.update(0)
+        self.assertEqual(self.results(task), [])
+        self.sequence.update(83)
+        self.assertEqual(
+            self.results(task),
+            ["Successfully turned 84 degrees to the left.\nSuccessfully stopped."],
+        )
+
+    def test_result_export_does_not_duplicate_api_cost_or_actions(self):
+        actions = [{"action": "stop"}]
+        request = self.manager.submit_prompt("stop")
+        self.manager._reply(
+            request, "Stop.", "planned", actions=actions, estimated_cost=0.123
+        )
+        self.sequence.replace(actions, request_id=request)
+        self.sequence.update(0)
+        rows = self.manager.export_snapshot()
+        self.assertEqual(
+            [row["estimated_api_cost_usd"] for row in rows], [None, 0.123, None]
+        )
+        self.assertEqual([row["action"] for row in rows], [None, actions, []])
+        self.assertEqual(self.manager.actions_snapshot(), actions)
 
 
 if __name__ == "__main__":

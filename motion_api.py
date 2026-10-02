@@ -27,6 +27,7 @@ class _ObjectMission:
     timeout: float
     phase: str | None = None
     status: str = "RUNNING"
+    reason: str | None = None
 
 
 _object_mission: _ObjectMission | None = None
@@ -247,6 +248,11 @@ def get_goto_status() -> str | None:
     return _object_mission.status if _object_mission is not None else None
 
 
+def get_goto_reason() -> str | None:
+    """Return the most recent mission's failure reason, when available."""
+    return _object_mission.reason if _object_mission is not None else None
+
+
 def cancel_goto_object() -> np.ndarray:
     """Cancel a running mission and stop its motion from the control thread."""
     if _object_mission is not None and _object_mission.status == "RUNNING":
@@ -256,6 +262,7 @@ def cancel_goto_object() -> np.ndarray:
 
 def _finish_object_mission(status, reason=None):
     _object_mission.status = status
+    _object_mission.reason = reason
     command = move(0, 0, 0, duration=0, new_command=True)
     message = f"[MISSION] status={status}"
     if reason is not None:

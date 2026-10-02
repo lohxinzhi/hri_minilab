@@ -24,6 +24,7 @@ from browser_gui import BrowserGUI, BrowserState
 from dialogue_manager import DialogueManager, validate_actions
 from motion_api import (
     cancel_goto_object,
+    get_goto_reason,
     get_goto_status,
     get_turn_target_heading,
     goto_object,
@@ -200,13 +201,18 @@ class RobotActionSequence:
         )
         self.goto_map_object = None
 
-    def _report_status(self, status):
+    def _report_status(self, status, *, reason=None):
         if self.on_status is not None and self.request_id is not None:
-            self.on_status(self.request_id, status)
+            if status == "failed":
+                self.on_status(
+                    self.request_id, status, action=self.goto_target, reason=reason
+                )
+            else:
+                self.on_status(self.request_id, status)
 
-    def cancel(self, status="cancelled"):
+    def cancel(self, status="cancelled", *, reason=None):
         if self._plan_running:
-            self._report_status(status)
+            self._report_status(status, reason=reason)
         if self.active == "goto":
             cancel_goto_object()
         self.goto_target = None
@@ -278,7 +284,9 @@ class RobotActionSequence:
             print(
                 "[MISSION] status=FAIL reason=object has no position in the active map"
             )
-            return self.cancel(status="failed")
+            return self.cancel(
+                status="failed", reason="object position is unavailable in this map"
+            )
         colors = {item["expected_color"] for item in candidates}
         if self.goto_map_object is not None:
             colors = {self.goto_map_object["expected_color"]}
@@ -311,7 +319,7 @@ class RobotActionSequence:
         )
         status = get_goto_status()
         if status == "FAIL":
-            return self.cancel(status="failed")
+            return self.cancel(status="failed", reason=get_goto_reason())
         if status == "SUCCESS":
             self.active = None
             self.active_index = None

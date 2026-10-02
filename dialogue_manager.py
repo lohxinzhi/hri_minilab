@@ -312,8 +312,12 @@ class DialogueManager:
                     "text": message["content"],
                     "estimated_api_cost_usd": self._export_costs.get(message["id"])
                     if message["role"] == "assistant"
+                    and message.get("kind") != "task_result"
                     else None,
                     "action": deepcopy(self._export_actions.get(message["id"], []))
+                    if message["role"] == "assistant"
+                    and message.get("kind") != "task_result"
+                    else []
                     if message["role"] == "assistant"
                     else None,
                 }
@@ -335,17 +339,89 @@ class DialogueManager:
         with self._chat_lock:
             return self._plan_request_ids.pop(id(actions), None)
 
-    def update_task_status(self, request_id, status):
+    def update_task_status(self, request_id, status, *, action=None, reason=None):
         """Update both chat entries as the simulation executes a prompt's plan."""
         if status not in {"executing", "completed", "failed", "cancelled"}:
             raise ValueError("unsupported task status")
         with self._chat_lock:
+            changed = False
             for message in self._chat:
                 if message["id"] == request_id and message["status"] in {
                     "planned",
                     "executing",
                 }:
                     message["status"] = status
+                    changed = True
+            actions = self._export_actions.get(request_id, [])
+            if (
+                changed
+                and status in {"completed", "failed", "cancelled"}
+                and any(item["action"] != "chat" for item in actions)
+            ):
+                content = self._task_result(
+                    actions, status, action=action, reason=reason
+                )
+                self._chat.append(
+                    {
+                        "id": request_id,
+                        "role": "assistant",
+                        "kind": "task_result",
+                        "content": content,
+                        "status": status,
+                    }
+                )
+
+    @staticmethod
+    def _task_result(actions, status, *, action=None, reason=None):
+        """Describe execution outcomes without another model request."""
+        if status == "cancelled":
+            return "Task cancelled before all actions were completed."
+        if status == "failed":
+            action = action or next(
+                (item for item in actions if item["action"] == "goto"), None
+            )
+            if action is not None and action["action"] == "goto":
+                color = action["object_color"]
+                target = (
+                    action["object_type"]
+                    if color == "any"
+                    else f"{color} {action['object_type']}"
+                )
+                if reason and "not found" in reason:
+                    return f"Failed to find the {target} after a full search."
+                if reason and "timeout" in reason:
+                    limit = reason.removesuffix("-second timeout")
+                    return f"Failed to find or approach the {target}: timed out after {limit} seconds."
+                if reason and "position" in reason:
+                    return f"Failed to approach the {target}: its position is unavailable in this map."
+                return f"Failed to approach the {target}: {reason or 'mission unsuccessful'}."
+            return f"Failed to complete the task: {reason or 'execution unsuccessful'}."
+        lines = []
+        for item in actions:
+            kind = item["action"]
+            if kind == "turn":
+                angle = item["angle"]
+                direction = "left" if angle > 0 else "right"
+                lines.append(
+                    f"Successfully turned {abs(angle):g} degrees to the {direction}."
+                    if angle
+                    else "Completed the zero-degree turn."
+                )
+            elif kind == "move":
+                verb = "moved" if any(item["velocity"].values()) else "waited"
+                lines.append(f"Successfully {verb} for {item['duration']:g} seconds.")
+            elif kind == "goto":
+                color = item["object_color"]
+                target = (
+                    item["object_type"]
+                    if color == "any"
+                    else f"{color} {item['object_type']}"
+                )
+                lines.append(f"Successfully approached the {target}.")
+            elif kind == "stop":
+                lines.append("Successfully stopped.")
+                break
+        return "\n".join(lines)
 
     def _reply(self, request_id, content, status, actions=None, estimated_cost=None):
         with self._chat_lock:
