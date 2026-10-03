@@ -191,25 +191,25 @@ class TaskStatusTests(unittest.TestCase):
 
     def test_failed_search_reports_target_and_reason(self):
         task = self.plan(
-            [{"action": "goto", "object_type": "car", "object_color": "blue"}]
+            [{"action": "goto", "object_type": "car", "object_color": "red"}]
         )
         for heading in (0, 90, 180, -90, 0):
             self.sequence.update(heading)
         self.assertEqual(
-            self.results(task), ["Failed to find the blue car after a full search."]
+            self.results(task), ["Failed to find the red car after a full search."]
         )
 
     def test_timeout_reply_includes_configured_duration(self):
         with patch.object(motion_api, "GOTO_TIMEOUT_SECONDS", 5):
             task = self.plan(
-                [{"action": "goto", "object_type": "car", "object_color": "blue"}]
+                [{"action": "goto", "object_type": "car", "object_color": "red"}]
             )
             self.sequence.update(0)
             self.now.return_value = 15
             self.sequence.update(0)
         self.assertEqual(
             self.results(task),
-            ["Failed to find or approach the blue car: timed out after 5 seconds."],
+            ["Failed to find or approach the red car: timed out after 5 seconds."],
         )
 
     def test_missing_map_position_is_explained(self):

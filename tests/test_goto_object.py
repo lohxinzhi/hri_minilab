@@ -72,10 +72,10 @@ class GotoObjectTests(unittest.TestCase):
         self.goto([40, 0, 60, 99])
         self.assertEqual(motion_api.get_goto_status(), "RUNNING")
         np.testing.assert_array_equal(
-            self.goto([40, 10, 60, 30], robot_position=(1.0, 0)), [0.5, 0, 0]
+            self.goto([40, 10, 60, 30], robot_position=(1.5, 0)), [0.5, 0, 0]
         )
         np.testing.assert_array_equal(
-            self.goto([40, 10, 60, 30], robot_position=(0.9, 0)), [0, 0, 0]
+            self.goto([40, 10, 60, 30], robot_position=(1.49, 0)), [0, 0, 0]
         )
         self.assertEqual(motion_api.get_goto_status(), "SUCCESS")
         np.testing.assert_array_equal(motion_api.move(0, 0, 0), [0, 0, 0])
@@ -111,7 +111,8 @@ class GotoObjectTests(unittest.TestCase):
         np.testing.assert_array_equal(self.goto(heading=179), [0, 0, 0])
         self.assertEqual(motion_api.get_goto_status(), "FAIL")
         self.assertIn(
-            "reason=object not found after one revolution", self.output.getvalue()
+            "reason=object not found after one revolution d=3.000m",
+            self.output.getvalue(),
         )
         self.assertEqual(self.output.getvalue().count("[SEARCH]"), 1)
         self.goto(heading=179)
@@ -321,6 +322,31 @@ class GotoObjectTests(unittest.TestCase):
         self.goto()
         self.assertEqual(self.output.getvalue().count("[MISSION]"), 1)
 
+    def test_timeout_logs_current_distance_in_both_vision_modes(self):
+        for use_vlm in (False, True):
+            with self.subTest(use_vlm=use_vlm):
+                self.now.return_value = 10
+                self.goto([40, 10, 60, 30], new_command=True, use_vlm=use_vlm)
+                self.now.return_value = 70
+                self.goto(robot_position=(2, 2), use_vlm=use_vlm)
+                self.assertTrue(
+                    self.output.getvalue()
+                    .strip()
+                    .endswith("[MISSION] status=FAIL reason=60-second timeout d=2.828m")
+                )
+
+    def test_replaced_mission_logs_distance_to_previous_target(self):
+        self.goto([40, 10, 60, 30])
+        self.goto(
+            new_command=True,
+            robot_position=(3, 4),
+            object_position=(30, 40),
+        )
+        self.assertIn(
+            "[MISSION] status=FAIL reason=replaced by a new mission d=5.000m",
+            self.output.getvalue(),
+        )
+
     def test_explicit_restart_and_target_change_start_new_missions(self):
         self.assertIsNone(motion_api.get_goto_status())
         self.goto([40, 10, 60, 30], robot_position=(0.5, 0))
@@ -415,10 +441,10 @@ class GotoObjectTests(unittest.TestCase):
         self.assertIn("[FOUND] class=chair color=red t=0.00s d=0.500m", logs)
 
     def test_distance_uses_both_axes_and_can_finish_after_visual_loss(self):
-        self.goto([40, 10, 60, 30], robot_position=(0.6, 0.6))
+        self.goto([40, 10, 60, 30], robot_position=(1.1, 1.1))
         self.assertEqual(motion_api.get_goto_status(), "RUNNING")
         np.testing.assert_array_equal(
-            self.goto(None, robot_position=(0.4, 0.6)), [0, 0, 0]
+            self.goto(None, robot_position=(0.9, 1.1)), [0, 0, 0]
         )
         self.assertEqual(motion_api.get_goto_status(), "SUCCESS")
 

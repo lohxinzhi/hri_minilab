@@ -12,7 +12,7 @@ shows the six objects.
 | --- | --- | --- | --- |
 | `chair_red` | chair | 56 | red |
 | `chair_blue` | chair | 56 | blue |
-| `bench` | bench | 13 | green wooden slats, backrest, and metal armrests |
+| `bench` | bench | 13 | bright green wooden slats, backrest, and metal armrests |
 | `bicycle` | bicycle | 1 | yellow frame with source material colors |
 | `sedan` | car | 2 | red 1971 Oldsmobile Cutlass Supreme sedan |
 | `suv` | car | 2 | cream-white Toyota Land Cruiser |

@@ -213,7 +213,7 @@ and yaw correction is `-0.8 * horizontal_error` rad/s, both 40% of the YOLO
 approach speeds. A completed observation that no longer matches the target
 returns the mission to search. Invalid responses or a box older than five
 seconds since receipt stop approach until a usable result arrives, without
-changing phase. The live distance check still stops the robot below 1.0 m.
+changing phase. Both YOLO and VLM modes stop below a world-frame distance of 1.5 m.
 YOLO approach remains at 0.5 m/s with `-2 * horizontal_error` yaw correction.
 Invalid boxes and API failures retry without being treated as a target loss;
 the existing 60-second goto deadline still applies. Boxes are checked for finite, ordered coordinates

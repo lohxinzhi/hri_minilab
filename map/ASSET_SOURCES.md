@@ -36,7 +36,7 @@ Animations and PBR channels other than base color are omitted.
 The chair mesh is shared by the red and blue chairs, with colors set in MJCF.
 The 2 m wide bench includes wooden seat and backrest slats and metal armrests.
 Its base-color texture is stored in `meshes/bench_texture.png`, with wood
-recolored green and gray metal retained using the built-in imagegen tool.
+recolored bright green and gray metal retained using the built-in imagegen tool.
 Bicycle material colors are baked into `meshes/bicycle_texture.png` as a
 solid-color atlas; its geometry is merged and scaled along each axis to the
 recorded dimensions.

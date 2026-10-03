@@ -5,8 +5,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
-GOTO_TIMEOUT_SECONDS = 60.0  # Shared wall-clock limit for search and approach.
-APPROACH_DISTANCE_METERS = 1.0
+GOTO_TIMEOUT_SECONDS = 90.0  # Shared wall-clock limit for search and approach.
+APPROACH_DISTANCE_METERS = 2.0
 VLM_APPROACH_SPEED_SCALE = 0.4
 
 _velocity = np.zeros(3, dtype=np.float32)
@@ -26,6 +26,8 @@ class _ObjectMission:
     object_color: str
     deadline: float
     timeout: float
+    object_position: tuple[float, float]
+    distance: float
     phase: str | None = None
     status: str = "RUNNING"
     reason: str | None = None
@@ -207,7 +209,7 @@ def approach(
     Horizontal error is box-center x / frame width minus 0.5. Positive
     image error requires a clockwise (negative wz) turn. Forward speed is
     0.5 m/s when abs(error) < 0.25; yaw rate is -2 * error rad/s.
-    Stop when the world-frame 2D distance is strictly below 1.0 m. A missing box stops
+    Stop when the world-frame 2D distance is strictly below 1.5 m. A missing box stops
     movement; goto_object handles the transition back to search.
     speed_scale reduces forward and yaw speeds for slower VLM observations.
     """
@@ -272,6 +274,8 @@ def _finish_object_mission(status, reason=None):
     message = f"[MISSION] status={status}"
     if reason is not None:
         message += f" reason={reason}"
+    if status == "FAIL":
+        message += f" d={_object_mission.distance:.3f}m"
     print(message)
     return command
 
@@ -335,12 +339,21 @@ def goto_object(
         if not np.isfinite(GOTO_TIMEOUT_SECONDS) or GOTO_TIMEOUT_SECONDS <= 0:
             raise ValueError("GOTO_TIMEOUT_SECONDS must be finite and positive")
         if _object_mission is not None and _object_mission.status == "RUNNING":
+            _object_mission.distance = _object_distance(
+                robot_position, _object_mission.object_position
+            )
             _finish_object_mission("FAIL", "replaced by a new mission")
         _object_mission = _ObjectMission(
-            object_type, object_color, now + GOTO_TIMEOUT_SECONDS, GOTO_TIMEOUT_SECONDS
+            object_type,
+            object_color,
+            now + GOTO_TIMEOUT_SECONDS,
+            GOTO_TIMEOUT_SECONDS,
+            tuple(object_position),
+            distance,
         )
     if _object_mission.status != "RUNNING":
         return np.zeros(3, dtype=np.float32)
+    _object_mission.distance = distance
     if now >= _object_mission.deadline:
         return _finish_object_mission(
             "FAIL", f"{_object_mission.timeout:g}-second timeout"

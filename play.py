@@ -348,7 +348,8 @@ class RobotActionSequence:
         ]
         if not candidates:
             print(
-                "[MISSION] status=FAIL reason=object has no position in the active map"
+                "[MISSION] status=FAIL reason=object has no position in the active map "
+                "d=unknown"
             )
             return self.cancel(
                 status="failed", reason="object position is unavailable in this map"
