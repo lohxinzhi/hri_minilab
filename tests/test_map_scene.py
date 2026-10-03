@@ -1,5 +1,6 @@
 """Validate the standalone COCO map and its object instances."""
 
+import json
 import unittest
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -21,7 +22,7 @@ class MapSceneTests(unittest.TestCase):
 
     def test_object_classes_and_chair_colors(self):
         model = mujoco.MjModel.from_xml_path(str(SCENE))
-        names = {"chair_red", "chair_blue", "bench", "car", "bicycle", "supra_blue"}
+        names = {"chair_red", "chair_blue", "bench", "sedan", "bicycle", "suv"}
         object_names = {model.body(i).name for i in range(1, model.nbody)}
         self.assertEqual(object_names, names)
         red_material = model.geom("chair_red_visual").matid[0]
@@ -38,9 +39,9 @@ class MapSceneTests(unittest.TestCase):
             "chair_red",
             "chair_blue",
             "bench",
-            "car",
+            "sedan",
             "bicycle",
-            "supra_blue",
+            "suv",
         ):
             with self.subTest(name=name):
                 geom = model.geom(name + "_visual")
@@ -52,24 +53,57 @@ class MapSceneTests(unittest.TestCase):
             if file:
                 self.assertTrue((SCENE.parent / "meshes" / file).is_file())
                 self.assertNotEqual(Path(file).suffix, ".glb")
-        for name in ("bench", "car", "bicycle"):
+        for name in ("bench", "sedan", "bicycle"):
             mesh_id = model.mesh(name + "_mesh").id
             self.assertGreater(model.mesh_texcoordnum[mesh_id], 0)
 
-    def test_replacement_vehicle_materials_and_collision_bounds(self):
+    def test_vehicle_source_materials_and_collision_bounds(self):
         model = mujoco.MjModel.from_xml_path(str(SCENE))
-        supra_material = model.geom("supra_blue_visual").matid[0]
-        color = model.mat_rgba[supra_material]
-        self.assertGreater(color[2], color[0])
-        for body_name in ("car", "supra_blue"):
+        metadata = json.loads((SCENE.parent / "mesh_transforms.json").read_text())
+        for body_name, source_name, uid in (
+            ("sedan", "oldsmobile", "78f76d386a4341b0b71745bdc50fd5ab"),
+            ("suv", "land_cruiser", "91b5815c64eb43b0a88f6fdb9df774e4"),
+        ):
+            record = metadata[source_name]
+            self.assertEqual(record["objaverse_uid"], uid)
             body = model.body(body_name)
             geom_ids = range(body.geomadr[0], body.geomadr[0] + body.geomnum[0])
             visuals = [i for i in geom_ids if model.geom_contype[i] == 0]
             collisions = [i for i in geom_ids if model.geom_contype[i] != 0]
-            self.assertGreater(len(visuals), 1)
+            self.assertEqual(len(visuals), len(record["parts"]))
             self.assertEqual(len(collisions), 1)
-            # Collision proxy spans the model's documented dimensions.
-            self.assertGreater(model.geom_size[collisions[0], 0] * 2, 4.0)
+            np.testing.assert_allclose(
+                model.geom_size[collisions[0]] * 2, record["dimensions_m"]
+            )
+            for geom_id, part in zip(visuals, record["parts"]):
+                material_id = model.geom_matid[geom_id]
+                np.testing.assert_allclose(model.mat_rgba[material_id], part["rgba"])
+                if part["texture"]:
+                    self.assertGreaterEqual(model.mat_texid[material_id, 1], 0)
+
+    def test_bench_has_visible_and_collidable_backrest(self):
+        vertices = np.array(
+            [
+                [float(value) for value in line.split()[1:4]]
+                for line in (SCENE.parent / "meshes" / "bench.obj")
+                .read_text()
+                .splitlines()
+                if line.startswith("v ")
+            ]
+        )
+        self.assertAlmostEqual(np.ptp(vertices[:, 0]), 2.0, places=5)
+        self.assertAlmostEqual(vertices[:, 2].min(), 0.0, places=5)
+        # The tall backrest sits behind the seat in the bench's local frame.
+        back = vertices[(vertices[:, 2] > 0.8) & (vertices[:, 1] < -0.2)]
+        self.assertGreater(len(back), 0)
+        self.assertGreater(np.ptp(back[:, 0]), 1.5)
+        model = mujoco.MjModel.from_xml_path(str(SCENE))
+        seat = model.geom("bench_seat_collision")
+        backrest = model.geom("bench_back_collision")
+        self.assertEqual(backrest.bodyid[0], model.body("bench").id)
+        self.assertNotEqual(backrest.contype[0], 0)
+        self.assertLess(backrest.pos[1], seat.pos[1])
+        self.assertGreater(backrest.pos[2], seat.pos[2])
 
     def test_objects_are_evenly_spaced_on_six_meter_circle(self):
         model = mujoco.MjModel.from_xml_path(str(SCENE))

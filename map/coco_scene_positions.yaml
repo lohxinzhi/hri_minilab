@@ -12,12 +12,12 @@ objects:
     y: 0.0
   bench:
     coco_class: bench
-    expected_color: brown
+    expected_color: green
     x: -3.0
     y: -5.196152423
-  car:
+  sedan:
     coco_class: car
-    expected_color: black
+    expected_color: red
     x: 6.0
     y: 0.0
   bicycle:
@@ -25,8 +25,8 @@ objects:
     expected_color: brown
     x: 3.0
     y: 5.196152423
-  supra_blue:
+  suv:
     coco_class: car
-    expected_color: blue
+    expected_color: gray
     x: 3.0
     y: -5.196152423

@@ -17,21 +17,24 @@
     ]
   },
   "bench": {
-    "faces": 260,
-    "uniform_scale": 1.1627906766540366,
-    "rotation": "90 degrees about X (GLTF Y-up to MJCF Z-up)",
+    "objaverse_uid": "9ef388cd9cb947f48957a497e8b8184a",
+    "source_glb": "glbs/000-034/9ef388cd9cb947f48957a497e8b8184a.glb",
+    "faces": 17432,
+    "uniform_scale": 0.003072518391462359,
+    "rotation": "Baked GLTF nodes, +90 degrees X (Y-up to Z-up), -90 degrees Z (long axis X, backrest -Y)",
     "bounds_m": [
       [
-        -1.3023255971162744,
-        -0.296511660658906,
+        -1.0000000000000002,
+        -0.5306991638995591,
         0.0
       ],
       [
-        1.3023255971162744,
-        0.296511660658906,
-        0.5
+        0.9999999999999998,
+        0.5306991638995591,
+        1.077461303549308
       ]
-    ]
+    ],
+    "texture": "Wood recolored green with the built-in imagegen tool; gray metal retained"
   },
   "cup": {
     "faces": 19904,
@@ -47,45 +50,6 @@
         0.07670559513041125,
         0.07454376710291859,
         0.14
-      ]
-    ]
-  },
-  "bottle": {
-    "faces": 63584,
-    "uniform_scale": 0.3674115073664173,
-    "rotation": "90 degrees about X (GLTF Y-up to MJCF Z-up)",
-    "bounds_m": [
-      [
-        -0.1662893979022244,
-        -0.13187838181022196,
-        0.0
-      ],
-      [
-        0.1662893979022242,
-        0.13187838181022196,
-        0.31999999999999984
-      ]
-    ]
-  },
-  "car": {
-    "faces": 2032,
-    "scaling": "per-axis to dimensions_m after rotation",
-    "dimensions_m": [
-      4.5,
-      1.85,
-      1.5
-    ],
-    "rotation": "90 degrees about X; car additionally 90 degrees about Z",
-    "bounds_m": [
-      [
-        -2.25,
-        -0.925,
-        0
-      ],
-      [
-        2.25,
-        0.925,
-        1.5
       ]
     ]
   },
@@ -111,227 +75,180 @@
       ]
     ]
   },
-  "suv": {
-    "faces": 2474,
-    "scaling": "per-axis to dimensions_m after rotation",
-    "dimensions_m": [
-      4.6,
-      1.95,
-      1.8
+  "oldsmobile": {
+    "objaverse_uid": "78f76d386a4341b0b71745bdc50fd5ab",
+    "source_glb": "glbs/000-080/78f76d386a4341b0b71745bdc50fd5ab.glb",
+    "uniform_scale": 0.021949801184343212,
+    "rotation": "+90 degrees X (Y-up to Z-up), +90 degrees Z (long axis X)",
+    "bounds_m": [
+      [
+        -2.65,
+        -1.0041435226400452,
+        0.0
+      ],
+      [
+        2.65,
+        1.0041435226400452,
+        1.460357557749408
+      ]
     ],
-    "rotation": "90 degrees about X and 90 degrees about Z",
+    "dimensions_m": [
+      5.3,
+      2.0082870452800905,
+      1.460357557749408
+    ],
+    "omitted_display_nodes": [
+      "ground_M_Dome_0"
+    ],
+    "parts": [
+      {
+        "mesh": "oldsmobile/oldsmobile_00.obj",
+        "source_material": "M_License",
+        "faces": 24,
+        "rgba": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "texture": "oldsmobile/oldsmobile_00.png"
+      },
+      {
+        "mesh": "oldsmobile/oldsmobile_01.obj",
+        "source_material": "M_Badge",
+        "faces": 8324,
+        "rgba": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "texture": "oldsmobile/oldsmobile_01.png"
+      },
+      {
+        "mesh": "oldsmobile/oldsmobile_02.obj",
+        "source_material": "M_Lights",
+        "faces": 1796,
+        "rgba": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "texture": "oldsmobile/oldsmobile_02.png"
+      },
+      {
+        "mesh": "oldsmobile/oldsmobile_03.obj",
+        "source_material": "M_Wheel",
+        "faces": 22756,
+        "rgba": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "texture": "oldsmobile/oldsmobile_03.png"
+      },
+      {
+        "mesh": "oldsmobile/oldsmobile_04.obj",
+        "source_material": "M_Glass",
+        "faces": 450,
+        "rgba": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "texture": "oldsmobile/oldsmobile_04.png"
+      },
+      {
+        "mesh": "oldsmobile/oldsmobile_05.obj",
+        "source_material": "M_Black",
+        "faces": 2610,
+        "rgba": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "texture": null
+      },
+      {
+        "mesh": "oldsmobile/oldsmobile_06.obj",
+        "source_material": "M_Paint",
+        "faces": 19974,
+        "rgba": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "texture": "oldsmobile/oldsmobile_06.png"
+      },
+      {
+        "mesh": "oldsmobile/oldsmobile_07.obj",
+        "source_material": "M_Chrome",
+        "faces": 14322,
+        "rgba": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "texture": "oldsmobile/oldsmobile_07.png"
+      }
+    ],
+    "texture_edit": "M_Paint base-color texture recolored from blue to red with the built-in imagegen tool; other material textures retained"
+  },
+  "land_cruiser": {
+    "objaverse_uid": "91b5815c64eb43b0a88f6fdb9df774e4",
+    "source_glb": "glbs/000-038/91b5815c64eb43b0a88f6fdb9df774e4.glb",
+    "uniform_scale": 0.022589558447721,
+    "rotation": "+90 degrees X (Y-up to Z-up), +90 degrees Z (long axis X)",
     "bounds_m": [
       [
         -2.3,
-        -0.9750000000000001,
+        -1.0173566951064765,
         0.0
       ],
       [
         2.3,
-        0.9750000000000001,
-        1.8000000000000003
+        1.0173566951064765,
+        1.734070285238897
       ]
-    ]
-  },
-  "lamborghini_centenario": {
-    "source_glb": "lamborghini_centenario.glb",
-    "uniform_scale": 1.0050921434697762,
-    "dimensions_m": [
-      4.9239999999999995,
-      2.2710621096553183,
-      1.1377321546037187
     ],
-    "rotation": "90 degrees about X and 90 degrees about Z",
-    "translation_m": [
-      -0.1387952507291561,
-      -0.0,
-      0.0020795434703287496
+    "dimensions_m": [
+      4.6,
+      2.034713390212953,
+      1.734070285238897
+    ],
+    "omitted_display_nodes": [
+      "Plane001_Material #71_0"
     ],
     "parts": [
       {
-        "mesh": "lamborghini_centenario/lamborghini_centenario_00.obj",
-        "source_material": "Material.001",
-        "source_faces": 19559,
-        "faces": 19559
+        "mesh": "land_cruiser/land_cruiser_00.obj",
+        "source_material": "Material_48",
+        "faces": 4326,
+        "rgba": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "texture": "land_cruiser/land_cruiser_00.png"
       },
       {
-        "mesh": "lamborghini_centenario/lamborghini_centenario_01.obj",
-        "source_material": "Material.007",
-        "source_faces": 696,
-        "faces": 696
-      },
-      {
-        "mesh": "lamborghini_centenario/lamborghini_centenario_02.obj",
-        "source_material": "glasses_Glas_light__0",
-        "source_faces": 511,
-        "faces": 511
-      },
-      {
-        "mesh": "lamborghini_centenario/lamborghini_centenario_03.obj",
-        "source_material": "Material.002",
-        "source_faces": 7646,
-        "faces": 7646
-      },
-      {
-        "mesh": "lamborghini_centenario/lamborghini_centenario_04.obj",
-        "source_material": "Material.017",
-        "source_faces": 1543,
-        "faces": 1543
-      },
-      {
-        "mesh": "lamborghini_centenario/lamborghini_centenario_05.obj",
-        "source_material": "Material.004",
-        "source_faces": 30,
-        "faces": 30
-      },
-      {
-        "mesh": "lamborghini_centenario/lamborghini_centenario_06.obj",
-        "source_material": "Material.003",
-        "source_faces": 32,
-        "faces": 32
-      },
-      {
-        "mesh": "lamborghini_centenario/lamborghini_centenario_07.obj",
-        "source_material": "Material.018",
-        "source_faces": 821,
-        "faces": 821
-      },
-      {
-        "mesh": "lamborghini_centenario/lamborghini_centenario_08.obj",
-        "source_material": "Material.011",
-        "source_faces": 920,
-        "faces": 920
-      }
-    ]
-  },
-  "toyota_supra": {
-    "source_glb": "toyota_supra.glb",
-    "uniform_scale": 1.0023992132664215,
-    "dimensions_m": [
-      4.380000000000001,
-      1.998574939608182,
-      1.2594777525217087
-    ],
-    "rotation": "90 degrees about X and 90 degrees about Z",
-    "translation_m": [
-      -0.14351997096681468,
-      -5.424925228481037e-07,
-      0.0012893960286706916
-    ],
-    "parts": [
-      {
-        "mesh": "toyota_supra/toyota_supra_00.obj",
-        "source_material": "carpaint",
-        "source_faces": 146360,
-        "faces": 19709
-      },
-      {
-        "mesh": "toyota_supra/toyota_supra_01.obj",
-        "source_material": "light",
-        "source_faces": 7392,
-        "faces": 7392
-      },
-      {
-        "mesh": "toyota_supra/toyota_supra_02.obj",
-        "source_material": "mirror",
-        "source_faces": 2464,
-        "faces": 2464
-      },
-      {
-        "mesh": "toyota_supra/toyota_supra_03.obj",
-        "source_material": "blackleather",
-        "source_faces": 206516,
-        "faces": 24616
-      },
-      {
-        "mesh": "toyota_supra/toyota_supra_04.obj",
-        "source_material": "red_reflec",
-        "source_faces": 13088,
-        "faces": 12000
-      },
-      {
-        "mesh": "toyota_supra/toyota_supra_05.obj",
-        "source_material": "GlossBlackpaint",
-        "source_faces": 461075,
-        "faces": 55717
-      },
-      {
-        "mesh": "toyota_supra/toyota_supra_06.obj",
-        "source_material": "blackplate_metal",
-        "source_faces": 3929,
-        "faces": 3929
-      },
-      {
-        "mesh": "toyota_supra/toyota_supra_07.obj",
-        "source_material": "lambert1",
-        "source_faces": 27571,
-        "faces": 12000
-      },
-      {
-        "mesh": "toyota_supra/toyota_supra_08.obj",
-        "source_material": "metal",
-        "source_faces": 141418,
-        "faces": 12838
-      },
-      {
-        "mesh": "toyota_supra/toyota_supra_09.obj",
-        "source_material": "tire",
-        "source_faces": 191992,
-        "faces": 25118
-      },
-      {
-        "mesh": "toyota_supra/toyota_supra_10.obj",
-        "source_material": "balck_tint_glass",
-        "source_faces": 56702,
-        "faces": 13682
-      },
-      {
-        "mesh": "toyota_supra/toyota_supra_11.obj",
-        "source_material": "orange_light",
-        "source_faces": 6744,
-        "faces": 6744
-      },
-      {
-        "mesh": "toyota_supra/toyota_supra_12.obj",
-        "source_material": "carbon",
-        "source_faces": 13077,
-        "faces": 12000
-      },
-      {
-        "mesh": "toyota_supra/toyota_supra_13.obj",
-        "source_material": "carplate",
-        "source_faces": 55,
-        "faces": 55
-      },
-      {
-        "mesh": "toyota_supra/toyota_supra_14.obj",
-        "source_material": "brake",
-        "source_faces": 6414,
-        "faces": 6414
-      },
-      {
-        "mesh": "toyota_supra/toyota_supra_15.obj",
-        "source_material": "seat",
-        "source_faces": 87568,
-        "faces": 12000
-      },
-      {
-        "mesh": "toyota_supra/toyota_supra_16.obj",
-        "source_material": "taillights",
-        "source_faces": 16046,
-        "faces": 12000
-      },
-      {
-        "mesh": "toyota_supra/toyota_supra_17.obj",
-        "source_material": "screen",
-        "source_faces": 1768,
-        "faces": 1768
-      },
-      {
-        "mesh": "toyota_supra/toyota_supra_18.obj",
-        "source_material": "button",
-        "source_faces": 53483,
-        "faces": 12000
+        "mesh": "land_cruiser/land_cruiser_01.obj",
+        "source_material": "Material_49",
+        "faces": 70,
+        "rgba": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "texture": "land_cruiser/land_cruiser_01.png"
       }
     ]
   }

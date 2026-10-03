@@ -19,78 +19,37 @@
     <mesh name="bicycle_mesh" file="bicycle.obj" />
     <texture name="bicycle_texture" type="2d" file="bicycle_texture.png" />
     <material name="bicycle_surface" texture="bicycle_texture" texuniform="false" rgba="1 1 1 1" />
-    <mesh name="car_mesh" file="lamborghini_centenario/lamborghini_centenario_00.obj" />
-    <texture name="lamborghini_centenario_00_texture" type="2d" file="lamborghini_centenario/lamborghini_centenario_00.png" />
-    <material name="lamborghini_centenario_00_surface" rgba="1 1 1 1" specular="0.2" shininess="0.17888543819998315" texture="lamborghini_centenario_00_texture" texuniform="false" />
-    <mesh name="car_mesh_01" file="lamborghini_centenario/lamborghini_centenario_01.obj" />
-    <texture name="lamborghini_centenario_01_texture" type="2d" file="lamborghini_centenario/lamborghini_centenario_01.png" />
-    <material name="lamborghini_centenario_01_surface" rgba="1 1 1 1" specular="0.2" shininess="0.17888543819998315" texture="lamborghini_centenario_01_texture" texuniform="false" />
-    <mesh name="car_mesh_02" file="lamborghini_centenario/lamborghini_centenario_02.obj" />
-    <material name="lamborghini_centenario_02_surface" rgba="0.0 0.0 0.0 0.5019607843137255" specular="0.2" shininess="0.4" />
-    <mesh name="car_mesh_03" file="lamborghini_centenario/lamborghini_centenario_03.obj" />
-    <texture name="lamborghini_centenario_03_texture" type="2d" file="lamborghini_centenario/lamborghini_centenario_03.png" />
-    <material name="lamborghini_centenario_03_surface" rgba="1 1 1 1" specular="0.2" shininess="0.17888543819998315" texture="lamborghini_centenario_03_texture" texuniform="false" />
-    <mesh name="car_mesh_04" file="lamborghini_centenario/lamborghini_centenario_04.obj" />
-    <texture name="lamborghini_centenario_04_texture" type="2d" file="lamborghini_centenario/lamborghini_centenario_04.png" />
-    <material name="lamborghini_centenario_04_surface" rgba="1 1 1 1" specular="0.2" shininess="0.17888543819998315" texture="lamborghini_centenario_04_texture" texuniform="false" />
-    <mesh name="car_mesh_05" file="lamborghini_centenario/lamborghini_centenario_05.obj" />
-    <texture name="lamborghini_centenario_05_texture" type="2d" file="lamborghini_centenario/lamborghini_centenario_05.png" />
-    <material name="lamborghini_centenario_05_surface" rgba="1 1 1 1" specular="0.2" shininess="0.17888543819998315" texture="lamborghini_centenario_05_texture" texuniform="false" />
-    <mesh name="car_mesh_06" file="lamborghini_centenario/lamborghini_centenario_06.obj" />
-    <texture name="lamborghini_centenario_06_texture" type="2d" file="lamborghini_centenario/lamborghini_centenario_06.png" />
-    <material name="lamborghini_centenario_06_surface" rgba="1 1 1 1" specular="0.2" shininess="0.17888543819998315" texture="lamborghini_centenario_06_texture" texuniform="false" />
-    <mesh name="car_mesh_07" file="lamborghini_centenario/lamborghini_centenario_07.obj" />
-    <texture name="lamborghini_centenario_07_texture" type="2d" file="lamborghini_centenario/lamborghini_centenario_07.png" />
-    <material name="lamborghini_centenario_07_surface" rgba="1 1 1 1" specular="0.2" shininess="0.17888543819998315" texture="lamborghini_centenario_07_texture" texuniform="false" />
-    <mesh name="car_mesh_08" file="lamborghini_centenario/lamborghini_centenario_08.obj" />
-    <texture name="lamborghini_centenario_08_texture" type="2d" file="lamborghini_centenario/lamborghini_centenario_08.png" />
-    <material name="lamborghini_centenario_08_surface" rgba="1 1 1 1" specular="0.2" shininess="0.17888543819998315" texture="lamborghini_centenario_08_texture" texuniform="false" />
-    <mesh name="supra_mesh" file="toyota_supra/toyota_supra_00.obj" />
-    <material name="toyota_supra_00_surface" rgba="0.04 0.18 0.85 1" specular="0.2" shininess="1.0" />
-    <mesh name="supra_mesh_01" file="toyota_supra/toyota_supra_01.obj" />
-    <material name="toyota_supra_01_surface" rgba="1 1 1 1" specular="0.2" shininess="1.0" />
-    <mesh name="supra_mesh_02" file="toyota_supra/toyota_supra_02.obj" />
-    <material name="toyota_supra_02_surface" rgba="1 1 1 1" specular="0.3" shininess="1.0" />
-    <mesh name="supra_mesh_03" file="toyota_supra/toyota_supra_03.obj" />
-    <material name="toyota_supra_03_surface" rgba="0.0 0.0 0.0 1.0" specular="0.2" shininess="0.2700930136168035" />
-    <mesh name="supra_mesh_04" file="toyota_supra/toyota_supra_04.obj" />
-    <material name="toyota_supra_04_surface" rgba="0.15294117647058825 0.0 0.0 1.0" specular="0.7847642964245224" shininess="0.7211420072899271" />
-    <mesh name="supra_mesh_05" file="toyota_supra/toyota_supra_05.obj" />
-    <material name="toyota_supra_05_surface" rgba="0.0 0.0 0.0 1.0" specular="0.2" shininess="0.9144193176610013" />
-    <mesh name="supra_mesh_06" file="toyota_supra/toyota_supra_06.obj" />
-    <material name="toyota_supra_06_surface" rgba="0.0 0.0 0.0 1.0" specular="0.8640026331508819" shininess="0.7455230339749608" />
-    <mesh name="supra_mesh_07" file="toyota_supra/toyota_supra_07.obj" />
-    <material name="toyota_supra_07_surface" rgba="0.0 0.0 0.0 1.0" specular="0.6872401896843876" shininess="0.8308566273725787" />
-    <mesh name="supra_mesh_08" file="toyota_supra/toyota_supra_08.obj" />
-    <material name="toyota_supra_08_surface" rgba="0.09411764705882353 0.09411764705882353 0.09411764705882353 1.0" specular="0.3" shininess="0.8918091940851629" />
-    <mesh name="supra_mesh_09" file="toyota_supra/toyota_supra_09.obj" />
-    <material name="toyota_supra_09_surface" rgba="0.0 0.0 0.0 1.0" specular="0.278857992710073" shininess="0.5687605905084663" />
-    <mesh name="supra_mesh_10" file="toyota_supra/toyota_supra_10.obj" />
-    <material name="toyota_supra_10_surface" rgba="0.0 0.0 0.0 0.35294117647058826" specular="0.2" shininess="1.0" />
-    <mesh name="supra_mesh_11" file="toyota_supra/toyota_supra_11.obj" />
-    <material name="toyota_supra_11_surface" rgba="1.0 0.23529411764705882 0.0 1.0" specular="0.2" shininess="1.0" />
-    <mesh name="supra_mesh_12" file="toyota_supra/toyota_supra_12.obj" />
-    <texture name="toyota_supra_12_texture" type="2d" file="toyota_supra/toyota_supra_12.png" />
-    <material name="toyota_supra_12_surface" rgba="1 1 1 1" specular="0.3" shininess="0.5565700771659494" texture="toyota_supra_12_texture" texuniform="false" />
-    <mesh name="supra_mesh_13" file="toyota_supra/toyota_supra_13.obj" />
-    <texture name="toyota_supra_13_texture" type="2d" file="toyota_supra/toyota_supra_13.png" />
-    <material name="toyota_supra_13_surface" rgba="1 1 1 1" specular="0.7055259596981628" shininess="0.7211420072899271" texture="toyota_supra_13_texture" texuniform="false" />
-    <mesh name="supra_mesh_14" file="toyota_supra/toyota_supra_14.obj" />
-    <material name="toyota_supra_14_surface" rgba="0.2901960784313726 0.0 0.0 1.0" specular="0.3032390193951067" shininess="0.6114273872072753" />
-    <mesh name="supra_mesh_15" file="toyota_supra/toyota_supra_15.obj" />
-    <material name="toyota_supra_15_surface" rgba="0.058823529411764705 0.0 0.0 1.0" specular="0.2" shininess="0.46514122709707306" />
-    <mesh name="supra_mesh_16" file="toyota_supra/toyota_supra_16.obj" />
-    <texture name="toyota_supra_16_texture" type="2d" file="toyota_supra/toyota_supra_16.png" />
-    <material name="toyota_supra_16_surface" rgba="1 1 1 1" specular="0.2" shininess="0.7699040606599944" texture="toyota_supra_16_texture" texuniform="false" />
-    <mesh name="supra_mesh_17" file="toyota_supra/toyota_supra_17.obj" />
-    <texture name="toyota_supra_17_texture" type="2d" file="toyota_supra/toyota_supra_17.png" />
-    <material name="toyota_supra_17_surface" rgba="1 1 1 1" specular="0.2" shininess="0.8003803440162865" texture="toyota_supra_17_texture" texuniform="false" />
-    <mesh name="supra_mesh_18" file="toyota_supra/toyota_supra_18.obj" />
-    <texture name="toyota_supra_18_texture" type="2d" file="toyota_supra/toyota_supra_18.png" />
-    <material name="toyota_supra_18_surface" rgba="1 1 1 1" specular="0.4678109495190842" shininess="0.763808803988736" texture="toyota_supra_18_texture" texuniform="false" />
+    <mesh name="sedan_mesh" file="oldsmobile/oldsmobile_00.obj" />
+    <texture name="oldsmobile_00_texture" type="2d" file="oldsmobile/oldsmobile_00.png" />
+    <material name="oldsmobile_00_surface" rgba="1.0 1.0 1.0 1.0" specular="0.2" shininess="0.3" texture="oldsmobile_00_texture" texuniform="false" />
+    <mesh name="sedan_mesh_01" file="oldsmobile/oldsmobile_01.obj" />
+    <texture name="oldsmobile_01_texture" type="2d" file="oldsmobile/oldsmobile_01.png" />
+    <material name="oldsmobile_01_surface" rgba="1.0 1.0 1.0 1.0" specular="0.2" shininess="0.3" texture="oldsmobile_01_texture" texuniform="false" />
+    <mesh name="sedan_mesh_02" file="oldsmobile/oldsmobile_02.obj" />
+    <texture name="oldsmobile_02_texture" type="2d" file="oldsmobile/oldsmobile_02.png" />
+    <material name="oldsmobile_02_surface" rgba="1.0 1.0 1.0 1.0" specular="0.2" shininess="0.3" texture="oldsmobile_02_texture" texuniform="false" />
+    <mesh name="sedan_mesh_03" file="oldsmobile/oldsmobile_03.obj" />
+    <texture name="oldsmobile_03_texture" type="2d" file="oldsmobile/oldsmobile_03.png" />
+    <material name="oldsmobile_03_surface" rgba="1.0 1.0 1.0 1.0" specular="0.2" shininess="0.3" texture="oldsmobile_03_texture" texuniform="false" />
+    <mesh name="sedan_mesh_04" file="oldsmobile/oldsmobile_04.obj" />
+    <texture name="oldsmobile_04_texture" type="2d" file="oldsmobile/oldsmobile_04.png" />
+    <material name="oldsmobile_04_surface" rgba="1.0 1.0 1.0 1.0" specular="0.2" shininess="0.3" texture="oldsmobile_04_texture" texuniform="false" />
+    <mesh name="sedan_mesh_05" file="oldsmobile/oldsmobile_05.obj" />
+    <material name="oldsmobile_05_surface" rgba="0.0 0.0 0.0 1.0" specular="0.2" shininess="0.3" />
+    <mesh name="sedan_mesh_06" file="oldsmobile/oldsmobile_06.obj" />
+    <texture name="oldsmobile_06_texture" type="2d" file="oldsmobile/oldsmobile_06.png" />
+    <material name="oldsmobile_06_surface" rgba="1.0 1.0 1.0 1.0" specular="0.2" shininess="0.3" texture="oldsmobile_06_texture" texuniform="false" />
+    <mesh name="sedan_mesh_07" file="oldsmobile/oldsmobile_07.obj" />
+    <texture name="oldsmobile_07_texture" type="2d" file="oldsmobile/oldsmobile_07.png" />
+    <material name="oldsmobile_07_surface" rgba="1.0 1.0 1.0 1.0" specular="0.2" shininess="0.3" texture="oldsmobile_07_texture" texuniform="false" />
+    <mesh name="suv_mesh" file="land_cruiser/land_cruiser_00.obj" />
+    <texture name="land_cruiser_00_texture" type="2d" file="land_cruiser/land_cruiser_00.png" />
+    <material name="land_cruiser_00_surface" rgba="1.0 1.0 1.0 1.0" specular="0.2" shininess="0.3" texture="land_cruiser_00_texture" texuniform="false" />
+    <mesh name="suv_mesh_01" file="land_cruiser/land_cruiser_01.obj" />
+    <texture name="land_cruiser_01_texture" type="2d" file="land_cruiser/land_cruiser_01.png" />
+    <material name="land_cruiser_01_surface" rgba="1.0 1.0 1.0 1.0" specular="0.2" shininess="0.3" texture="land_cruiser_01_texture" texuniform="false" />
   </asset>
   <worldbody>
-    <!-- Objects centered on a 6 m circle at 60 degree intervals. Robot spawns at (0, 0) in play.py. COCO classes: chair (56), bench (13), car (2), bicycle (1). -->
     <light name="key" pos="-3 -4 6" dir="0.3 0.4 -1" directional="true" />
     <light name="fill" pos="3 2 5" dir="-0.3 -0.2 -1" diffuse="0.4 0.4 0.4" />
     <camera name="overview" pos="10 -15 12" xyaxes="0.83205 0.5547 0 -0.267 0.400 0.876" />
@@ -115,47 +74,32 @@
     </body>
     <body name="bench" pos="-3.000000000 -5.196152423 0" euler="0 0 330">
       <geom name="bench_visual" type="mesh" mesh="bench_mesh" material="bench_surface" contype="0" conaffinity="0" group="2" />
-      <geom type="box" pos="0 0 0.465" size="1.302 0.297 0.035" rgba="0 0 0 0" group="3" friction="0.8 0.01 0.001" condim="3" />
-      <geom type="box" pos="-1.07 0 0.22" size="0.15 0.26 0.22" rgba="0 0 0 0" group="3" friction="0.8 0.01 0.001" condim="3" />
-      <geom type="box" pos="1.07 0 0.22" size="0.15 0.26 0.22" rgba="0 0 0 0" group="3" friction="0.8 0.01 0.001" condim="3" />
+      <geom name="bench_seat_collision" type="box" pos="0 0.07 0.50" size="0.92 0.32 0.035" rgba="0 0 0 0" group="3" friction="0.8 0.01 0.001" condim="3" />
+      <geom name="bench_back_collision" type="box" pos="0 -0.35 0.83" size="0.91 0.025 0.25" euler="20 0 0" rgba="0 0 0 0" group="3" friction="0.8 0.01 0.001" condim="3" />
+      <geom type="box" pos="-0.92 -0.36 0.235" size="0.035 0.04 0.235" rgba="0 0 0 0" group="3" friction="0.8 0.01 0.001" condim="3" />
+      <geom type="box" pos="0.92 -0.36 0.235" size="0.035 0.04 0.235" rgba="0 0 0 0" group="3" friction="0.8 0.01 0.001" condim="3" />
+      <geom type="box" pos="-0.92 0.36 0.235" size="0.035 0.04 0.235" rgba="0 0 0 0" group="3" friction="0.8 0.01 0.001" condim="3" />
+      <geom type="box" pos="0.92 0.36 0.235" size="0.035 0.04 0.235" rgba="0 0 0 0" group="3" friction="0.8 0.01 0.001" condim="3" />
     </body>
-    <body name="car" pos="6.000000000 0.000000000 0" euler="0 0 90">
-      <geom name="car_visual" type="mesh" mesh="car_mesh" material="lamborghini_centenario_00_surface" contype="0" conaffinity="0" group="2" />
-      <geom name="car_visual_01" type="mesh" mesh="car_mesh_01" material="lamborghini_centenario_01_surface" contype="0" conaffinity="0" group="2" />
-      <geom name="car_visual_02" type="mesh" mesh="car_mesh_02" material="lamborghini_centenario_02_surface" contype="0" conaffinity="0" group="2" />
-      <geom name="car_visual_03" type="mesh" mesh="car_mesh_03" material="lamborghini_centenario_03_surface" contype="0" conaffinity="0" group="2" />
-      <geom name="car_visual_04" type="mesh" mesh="car_mesh_04" material="lamborghini_centenario_04_surface" contype="0" conaffinity="0" group="2" />
-      <geom name="car_visual_05" type="mesh" mesh="car_mesh_05" material="lamborghini_centenario_05_surface" contype="0" conaffinity="0" group="2" />
-      <geom name="car_visual_06" type="mesh" mesh="car_mesh_06" material="lamborghini_centenario_06_surface" contype="0" conaffinity="0" group="2" />
-      <geom name="car_visual_07" type="mesh" mesh="car_mesh_07" material="lamborghini_centenario_07_surface" contype="0" conaffinity="0" group="2" />
-      <geom name="car_visual_08" type="mesh" mesh="car_mesh_08" material="lamborghini_centenario_08_surface" contype="0" conaffinity="0" group="2" />
-      <geom type="box" pos="0 0 0.5688660773018593" size="2.4619999999999997 1.1355310548276591 0.5688660773018593" rgba="0 0 0 0" group="3" friction="0.8 0.01 0.001" condim="3" />
+    <body name="sedan" pos="6.000000000 0.000000000 0" euler="0 0 90">
+      <geom name="sedan_visual" type="mesh" mesh="sedan_mesh" material="oldsmobile_00_surface" contype="0" conaffinity="0" group="2" />
+      <geom name="sedan_visual_01" type="mesh" mesh="sedan_mesh_01" material="oldsmobile_01_surface" contype="0" conaffinity="0" group="2" />
+      <geom name="sedan_visual_02" type="mesh" mesh="sedan_mesh_02" material="oldsmobile_02_surface" contype="0" conaffinity="0" group="2" />
+      <geom name="sedan_visual_03" type="mesh" mesh="sedan_mesh_03" material="oldsmobile_03_surface" contype="0" conaffinity="0" group="2" />
+      <geom name="sedan_visual_04" type="mesh" mesh="sedan_mesh_04" material="oldsmobile_04_surface" contype="0" conaffinity="0" group="2" />
+      <geom name="sedan_visual_05" type="mesh" mesh="sedan_mesh_05" material="oldsmobile_05_surface" contype="0" conaffinity="0" group="2" />
+      <geom name="sedan_visual_06" type="mesh" mesh="sedan_mesh_06" material="oldsmobile_06_surface" contype="0" conaffinity="0" group="2" />
+      <geom name="sedan_visual_07" type="mesh" mesh="sedan_mesh_07" material="oldsmobile_07_surface" contype="0" conaffinity="0" group="2" />
+      <geom name="sedan_collision" type="box" pos="0 0 0.730178778874704" size="2.65 1.0041435226400452 0.730178778874704" rgba="0 0 0 0" group="3" friction="0.8 0.01 0.001" condim="3" />
     </body>
     <body name="bicycle" pos="3.000000000 5.196152423 0" euler="0 0 150">
       <geom name="bicycle_visual" type="mesh" mesh="bicycle_mesh" material="bicycle_surface" contype="0" conaffinity="0" group="2" />
       <geom type="box" pos="0 0 0.59" size="0.925 0.09 0.59" rgba="0 0 0 0" group="3" friction="0.8 0.01 0.001" condim="3" />
     </body>
-    <body name="supra_blue" pos="3.000000000 -5.196152423 0" euler="0 0 390">
-      <geom name="supra_blue_visual" type="mesh" mesh="supra_mesh" material="toyota_supra_00_surface" contype="0" conaffinity="0" group="2" />
-      <geom name="supra_blue_visual_01" type="mesh" mesh="supra_mesh_01" material="toyota_supra_01_surface" contype="0" conaffinity="0" group="2" />
-      <geom name="supra_blue_visual_02" type="mesh" mesh="supra_mesh_02" material="toyota_supra_02_surface" contype="0" conaffinity="0" group="2" />
-      <geom name="supra_blue_visual_03" type="mesh" mesh="supra_mesh_03" material="toyota_supra_03_surface" contype="0" conaffinity="0" group="2" />
-      <geom name="supra_blue_visual_04" type="mesh" mesh="supra_mesh_04" material="toyota_supra_04_surface" contype="0" conaffinity="0" group="2" />
-      <geom name="supra_blue_visual_05" type="mesh" mesh="supra_mesh_05" material="toyota_supra_05_surface" contype="0" conaffinity="0" group="2" />
-      <geom name="supra_blue_visual_06" type="mesh" mesh="supra_mesh_06" material="toyota_supra_06_surface" contype="0" conaffinity="0" group="2" />
-      <geom name="supra_blue_visual_07" type="mesh" mesh="supra_mesh_07" material="toyota_supra_07_surface" contype="0" conaffinity="0" group="2" />
-      <geom name="supra_blue_visual_08" type="mesh" mesh="supra_mesh_08" material="toyota_supra_08_surface" contype="0" conaffinity="0" group="2" />
-      <geom name="supra_blue_visual_09" type="mesh" mesh="supra_mesh_09" material="toyota_supra_09_surface" contype="0" conaffinity="0" group="2" />
-      <geom name="supra_blue_visual_10" type="mesh" mesh="supra_mesh_10" material="toyota_supra_10_surface" contype="0" conaffinity="0" group="2" />
-      <geom name="supra_blue_visual_11" type="mesh" mesh="supra_mesh_11" material="toyota_supra_11_surface" contype="0" conaffinity="0" group="2" />
-      <geom name="supra_blue_visual_12" type="mesh" mesh="supra_mesh_12" material="toyota_supra_12_surface" contype="0" conaffinity="0" group="2" />
-      <geom name="supra_blue_visual_13" type="mesh" mesh="supra_mesh_13" material="toyota_supra_13_surface" contype="0" conaffinity="0" group="2" />
-      <geom name="supra_blue_visual_14" type="mesh" mesh="supra_mesh_14" material="toyota_supra_14_surface" contype="0" conaffinity="0" group="2" />
-      <geom name="supra_blue_visual_15" type="mesh" mesh="supra_mesh_15" material="toyota_supra_15_surface" contype="0" conaffinity="0" group="2" />
-      <geom name="supra_blue_visual_16" type="mesh" mesh="supra_mesh_16" material="toyota_supra_16_surface" contype="0" conaffinity="0" group="2" />
-      <geom name="supra_blue_visual_17" type="mesh" mesh="supra_mesh_17" material="toyota_supra_17_surface" contype="0" conaffinity="0" group="2" />
-      <geom name="supra_blue_visual_18" type="mesh" mesh="supra_mesh_18" material="toyota_supra_18_surface" contype="0" conaffinity="0" group="2" />
-      <geom type="box" pos="0 0 0.6297388762608543" size="2.1900000000000004 0.999287469804091 0.6297388762608543" rgba="0 0 0 0" group="3" friction="0.8 0.01 0.001" condim="3" />
+    <body name="suv" pos="3.000000000 -5.196152423 0" euler="0 0 390">
+      <geom name="suv_visual" type="mesh" mesh="suv_mesh" material="land_cruiser_00_surface" contype="0" conaffinity="0" group="2" />
+      <geom name="suv_visual_01" type="mesh" mesh="suv_mesh_01" material="land_cruiser_01_surface" contype="0" conaffinity="0" group="2" />
+      <geom name="suv_collision" type="box" pos="0 0 0.8670351426194485" size="2.3 1.0173566951064765 0.8670351426194485" rgba="0 0 0 0" group="3" friction="0.8 0.01 0.001" condim="3" />
     </body>
   </worldbody>
 </mujoco>
